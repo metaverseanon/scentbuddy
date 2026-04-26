@@ -116,6 +116,13 @@ export default function PaywallScreen() {
   }, [selectedPkg, purchasePackage]);
 
   const handleRestore = useCallback(async () => {
+    if (!rcConfigured) {
+      Alert.alert(
+        'Purchases Unavailable',
+        'In-app purchases only work in the App Store or TestFlight build of ScentBuddy — not in Expo Go. Install the production app to manage your subscription.',
+      );
+      return;
+    }
     try {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       await restorePurchases();
@@ -123,7 +130,7 @@ export default function PaywallScreen() {
     } catch (error: any) {
       Alert.alert('Restore Failed', error.message || 'Could not restore purchases. Please try again.');
     }
-  }, [restorePurchases, isPro]);
+  }, [restorePurchases, isPro, rcConfigured]);
 
   const savingsText = getSavingsText(packages);
 
@@ -207,24 +214,26 @@ export default function PaywallScreen() {
               <>
                 <Text style={[styles.loadingText, { color: colors.subtext }]}>
                   {!rcConfigured
-                    ? 'Subscriptions are reconnecting'
+                    ? 'Subscription service unavailable'
                     : 'No plans available right now'}
                 </Text>
                 <Text style={[styles.hintText, { color: colors.subtext }]}>
                   {!rcConfigured
-                    ? rcConfigurationError ?? 'Tap retry to reconnect to subscriptions.'
+                    ? 'In-app purchases require the App Store or TestFlight build — they are not available in Expo Go during development.'
                     : 'Make sure you have an internet connection and try again'}
                 </Text>
-                <TouchableOpacity
-                  style={[styles.retryBtn, { borderColor: colors.border }]}
-                  onPress={() => {
-                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                    void refetchOfferings();
-                  }}
-                >
-                  <ArrowCounterClockwise size={16} color={colors.accent} />
-                  <Text style={[styles.retryBtnText, { color: colors.accent }]}>Retry</Text>
-                </TouchableOpacity>
+                {rcConfigured && (
+                  <TouchableOpacity
+                    style={[styles.retryBtn, { borderColor: colors.border }]}
+                    onPress={() => {
+                      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                      void refetchOfferings();
+                    }}
+                  >
+                    <ArrowCounterClockwise size={16} color={colors.accent} />
+                    <Text style={[styles.retryBtnText, { color: colors.accent }]}>Retry</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </View>
