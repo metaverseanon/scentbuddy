@@ -1,0 +1,91 @@
+~/.../artifacts/scentbuddy$ eas build --platform ios --profile production
+eas submit --platform ios --latest
+
+⚠️ Detected that your app uses Expo Go for development, this is not recommended when building production apps.
+Learn more: https://expo.fyi/why-not-build-expo-go-for-production
+To suppress this warning, set EAS_BUILD_NO_EXPO_GO_WARNING=true.
+
+Resolved "production" environment for the build. Learn more: https://docs.expo.dev/eas/environment-variables/#setting-the-environment-for-your-builds
+Environment variables with visibility "Plain text" and "Sensitive" loaded from the "production" environment on EAS: EXPO_PUBLIC_PROJECT_ID, EXPO_PUBLIC_REMOVAL_AI_API_KEY, EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY, EXPO_PUBLIC_REVENUECAT_IOS_API_KEY, EXPO_PUBLIC_REVENUECAT_TEST_API_KEY, EXPO_PUBLIC_RORK_API_BASE_URL, EXPO_PUBLIC_RORK_AUTH_URL, EXPO_PUBLIC_RORK_TOOLKIT_SECRET_KEY, EXPO_PUBLIC_TEAM_ID, EXPO_PUBLIC_TOOLKIT_URL, REVENUECAT_SECRET_API_KEY.
+
+✔ Incremented buildNumber from 24 to 25.
+
+
+✔ Using remote iOS credentials (Expo server)
+
+If you provide your Apple account credentials we will be able to generate all necessary build credentials and fully validate them.
+This is optional, but without Apple account access you will need to provide all the missing values manually and we can only run minimal validation on them.
+✔ Do you want to log in to your Apple account? … yes
+
+› Log in to your Apple Developer account to continue
+✔ Apple ID: … tgranic95@gmail.com
+› Restoring session /home/runner/.app-store/auth/tgranic95@gmail.com/cookie
+› Team Antonio Granic (8T3MGH8CJ6)
+› Provider Antonio Granic (128461696)
+✔ Logged in Local session
+✔ Bundle identifier registered app.rork.0kxdwz3d5g57j5m9vjhxs
+✔ Synced capabilities: No updates
+✔ Synced capability identifiers: No updates
+✔ Fetched Apple distribution certificates
+✔ Fetched Apple provisioning profiles
+
+Project Credentials Configuration
+
+Project                   @tonix_o/0kxdwz3d5g57j5m9vjhxs
+Bundle Identifier         app.rork.0kxdwz3d5g57j5m9vjhxs
+                          
+App Store Configuration   
+                          
+Distribution Certificate  
+Serial Number             2F68402D6A4D2C98C400E38075C7545
+Expiration Date           Sat, 30 Jan 2027 09:05:47 UTC
+Apple Team                8T3MGH8CJ6 (Antonio Granic (Individual))
+Updated                   2 months ago
+                          
+Provisioning Profile      
+Developer Portal ID       4KWPA24G24
+Status                    active
+Expiration                Sat, 30 Jan 2027 09:05:47 UTC
+Apple Team                8T3MGH8CJ6 (Antonio Granic (Individual))
+Updated                   1 hour ago
+                          
+All credentials are ready to build @tonix_o/0kxdwz3d5g57j5m9vjhxs (app.rork.0kxdwz3d5g57j5m9vjhxs)
+
+✔ Push Notifications are set up
+
+Compressing project files and uploading to EAS Build. Learn more: https://expo.fyi/eas-build-archive
+✔ Compressed project files 1s (16.6 MB)
+✔ Uploaded to EAS 3s
+✔ Computed project fingerprint
+
+See logs: https://expo.dev/accounts/tonix_o/projects/0kxdwz3d5g57j5m9vjhxs/builds/38ee1247-4c93-48b1-943f-bde28e9cb581
+
+Waiting for build to complete. You can press Ctrl+C to exit.
+✖ Build failed
+
+🍏 iOS build failed:
+Unknown error. See logs of the Install pods build phase for more information.
+
+Looking up credentials configuration for app.rork.0kxdwz3d5g57j5m9vjhxs...
+✔ App Store Connect API Key already set up.
+Using Api Key ID: 272S8NVNMD ([Expo] EAS Submit -cZb6CnHyq)
+
+ASC App ID:                 6761390616
+Project ID:                 336aa47d-e6fb-4905-abb9-77939d62e752
+App Store Connect API Key:  
+    Key Name  :  [Expo] EAS Submit -cZb6CnHyq
+    Key ID    :  272S8NVNMD
+    Key Source:  EAS servers
+Build:                      
+    Build ID    :  9cd85c63-30de-4449-b997-a7c0080a0b3c
+    Build Date  :  4/26/2026, 12:17:55 PM
+    App Version :  1.2.3
+    Build number:  24
+
+✔ Scheduled iOS submission
+
+Submission details: https://expo.dev/accounts/tonix_o/projects/0kxdwz3d5g57j5m9vjhxs/submissions/ddd699fb-4ba1-44b8-9677-0960c109f5e1
+
+Waiting for submission to complete. You can press Ctrl+C to exit.
+✖ Something went wrong when submitting your app to Apple App Store Connect.
+~/.../artifacts/scentbuddy$ 
