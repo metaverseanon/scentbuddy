@@ -621,6 +621,8 @@ export const [NotificationProvider, useNotifications] = createContextHook(() => 
         console.log('[PUSH] Notification tapped:', data);
         if (data?.type === 'diary_reminder' || data?.type === 'streak_reminder') {
           router.push('/diary');
+        } else if (data?.type === 'weekly_recap') {
+          router.push('/weekly-recap' as any);
         }
       });
     }
