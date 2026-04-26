@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { apiUrl } from './api';
 
 const REMOVAL_AI_API_URL = 'https://api.removal.ai/3.0/remove';
 const REMOVAL_AI_API_KEY = process.env.EXPO_PUBLIC_REMOVAL_AI_API_KEY || '';
@@ -7,12 +8,12 @@ const MAX_RETRIES = 2;
 
 async function normalizeImage(base64: string): Promise<string> {
   try {
-    const apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
-    if (!apiDomain) {
-      console.log('[IMAGE-PROCESSING] No EXPO_PUBLIC_DOMAIN set, skipping normalization');
+    const url = apiUrl('/api/images/normalize');
+    if (!url) {
+      console.log('[IMAGE-PROCESSING] API URL not configured, skipping normalization');
       return base64;
     }
-    const response = await fetch(`https://${apiDomain}/api/images/normalize`, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base64 }),

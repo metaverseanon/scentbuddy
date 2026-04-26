@@ -23,6 +23,7 @@ import { z } from 'zod';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { supabase, forceHttps } from '@/lib/supabase';
+import { apiUrl } from '@/lib/api';
 import { TodayWear, ActivityFeedItem, Profile, Notification, CollectionItem, TrendingItem } from '@/lib/types';
 import ProfileAvatar from '@/components/ProfileAvatar';
 import { createFollowNotification, sendPushToUser } from '@/lib/notifications';
@@ -188,8 +189,9 @@ export default function CommunityScreen() {
     queryFn: async () => {
       try {
         console.log('Fetching social media trending perfumes...');
-        const apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
-        const aiRes = await fetch(`https://${apiDomain}/api/ai/social-trends`);
+        const url = apiUrl('/api/ai/social-trends');
+        if (!url) throw new Error('API URL not configured');
+        const aiRes = await fetch(url);
         if (!aiRes.ok) throw new Error('AI request failed');
         const result = socialTrendingSchema.parse(await aiRes.json());
         console.log('Social trends fetched:', result.perfumes?.length);

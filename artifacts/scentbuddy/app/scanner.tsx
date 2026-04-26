@@ -20,6 +20,7 @@ import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { supabase, searchFragrances, forceHttps } from '@/lib/supabase';
+import { apiUrl } from '@/lib/api';
 import { SearchResult } from '@/lib/types';
 
 type ScanMode = 'barcode' | 'photo';
@@ -125,8 +126,9 @@ export default function ScannerScreen() {
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     try {
-      const apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
-      const aiRes = await fetch(`https://${apiDomain}/api/ai/identify-fragrance`, {
+      const identifyUrl = apiUrl('/api/ai/identify-fragrance');
+      if (!identifyUrl) throw new Error('API URL not configured');
+      const aiRes = await fetch(identifyUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageBase64: base64 }),
