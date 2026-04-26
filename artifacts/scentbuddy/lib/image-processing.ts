@@ -5,6 +5,31 @@ const REMOVAL_AI_API_KEY = process.env.EXPO_PUBLIC_REMOVAL_AI_API_KEY || '';
 const BUCKET_NAME = 'clean-bottles';
 const MAX_RETRIES = 2;
 
+async function normalizeImage(base64: string): Promise<string> {
+  try {
+    const apiDomain = process.env.EXPO_PUBLIC_DOMAIN;
+    if (!apiDomain) {
+      console.log('[IMAGE-PROCESSING] No EXPO_PUBLIC_DOMAIN set, skipping normalization');
+      return base64;
+    }
+    const response = await fetch(`https://${apiDomain}/api/images/normalize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base64 }),
+    });
+    if (!response.ok) {
+      console.log('[IMAGE-PROCESSING] Normalize request failed:', response.status);
+      return base64;
+    }
+    const data = await response.json() as { base64: string };
+    console.log('[IMAGE-PROCESSING] Normalization complete');
+    return data.base64 || base64;
+  } catch (err) {
+    console.log('[IMAGE-PROCESSING] Normalize error, using original:', err);
+    return base64;
+  }
+}
+
 export async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
   try {
     console.log('[IMAGE-PROCESSING] Fetching image:', imageUrl);
@@ -231,8 +256,10 @@ export async function processFragranceImage(
       return null;
     }
 
-    const finalBase64 = trimTransparentPixels(result.base64);
-    console.log('[IMAGE-PROCESSING] Using trimmed image, base64 length:', finalBase64.length);
+    console.log('[IMAGE-PROCESSING] Normalizing bottle size...');
+    const normalizedBase64 = await normalizeImage(result.base64);
+    const finalBase64 = trimTransparentPixels(normalizedBase64);
+    console.log('[IMAGE-PROCESSING] Using normalized image, base64 length:', finalBase64.length);
 
     const publicUrl = await uploadCleanImage(userId, itemId, finalBase64, result.mimeType);
     if (!publicUrl) {
