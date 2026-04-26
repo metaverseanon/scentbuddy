@@ -26,3 +26,8 @@ externalPort = 80
 [[ports]]
 localPort = 23216
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+EXPO_PUBLIC_PROJECT_ID = "47299c20-5e8a-4485-88e5-01aa6b5403f9"
