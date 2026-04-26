@@ -3,9 +3,31 @@ import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
+import appsFlyer from 'react-native-appsflyer';
 
 const INSTALL_TRACKED_KEY = 'appsflyer_install_tracked_v1';
 const APPSFLYER_ID_KEY = 'appsflyer_device_id_v1';
+const APPSFLYER_DEV_KEY = process.env.EXPO_PUBLIC_APPSFLYER_DEV_KEY ?? '';
+const APPSFLYER_IOS_APP_ID = '6761390616';
+
+let nativeSdkInitialized = false;
+
+function initNativeSdk(): void {
+  if (nativeSdkInitialized || Platform.OS === 'web' || !APPSFLYER_DEV_KEY) return;
+  nativeSdkInitialized = true;
+  appsFlyer.initSdk(
+    {
+      devKey: APPSFLYER_DEV_KEY,
+      appId: APPSFLYER_IOS_APP_ID,
+      isDebug: false,
+      onInstallConversionDataListener: true,
+      onDeepLinkListener: true,
+      timeToWaitForATTUserAuthorization: 10,
+    },
+    () => console.log('[AppsFlyer] Native SDK initialized'),
+    (err) => console.log('[AppsFlyer] Native SDK init error:', err)
+  );
+}
 
 type AppsFlyerEventName =
   | 'af_login'
@@ -174,6 +196,7 @@ export const AppsFlyerEvents = {
 
 export async function trackAppsFlyerAppOpen(): Promise<void> {
   if (Platform.OS === 'web') return;
+  initNativeSdk();
   try {
     const alreadyInstalled = await AsyncStorage.getItem(INSTALL_TRACKED_KEY);
     if (!alreadyInstalled) {

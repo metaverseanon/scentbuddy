@@ -72,6 +72,8 @@
     "zustand": "^5.0.2"
   },
   "dependencies": {
-    "lucide-react-native": "^1.11.0"
+    "lucide-react-native": "^1.11.0",
+    "react-native-appsflyer": "^6.17.9",
+    "react-native-tiktok-business-sdk": "^1.6.0"
   }
 }

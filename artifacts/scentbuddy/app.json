@@ -48,7 +48,8 @@
           "icon": "./assets/images/icon.png",
           "color": "#c49a6c"
         }
-      ]
+      ],
+      "react-native-appsflyer"
     ],
     "experiments": {
       "typedRoutes": true

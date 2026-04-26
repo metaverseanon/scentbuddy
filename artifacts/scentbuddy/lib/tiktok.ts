@@ -3,8 +3,21 @@ import * as Application from 'expo-application';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
+import { TikTokBusiness } from 'react-native-tiktok-business-sdk';
 
 const INSTALL_TRACKED_KEY = 'tiktok_install_tracked_v1';
+const TIKTOK_APP_ID = process.env.EXPO_PUBLIC_TIKTOK_APP_ID ?? '';
+const TIKTOK_ACCESS_TOKEN = process.env.EXPO_PUBLIC_TIKTOK_ACCESS_TOKEN ?? '';
+
+let nativeSdkInitialized = false;
+
+function initNativeSdk(): void {
+  if (nativeSdkInitialized || Platform.OS === 'web' || !TIKTOK_APP_ID || !TIKTOK_ACCESS_TOKEN) return;
+  nativeSdkInitialized = true;
+  TikTokBusiness.initializeSdk(TIKTOK_APP_ID, TIKTOK_APP_ID, TIKTOK_ACCESS_TOKEN)
+    .then(() => console.log('[TikTok] Native SDK initialized'))
+    .catch((err: unknown) => console.log('[TikTok] Native SDK init error:', err));
+}
 
 type TikTokEventName =
   | 'CompleteRegistration'
@@ -148,6 +161,7 @@ export const TikTokEvents = {
 
 export async function trackAppOpen(): Promise<void> {
   if (Platform.OS === 'web') return;
+  initNativeSdk();
   try {
     const alreadyInstalled = await AsyncStorage.getItem(INSTALL_TRACKED_KEY);
     if (!alreadyInstalled) {
