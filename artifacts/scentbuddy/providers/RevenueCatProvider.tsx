@@ -19,7 +19,8 @@ const FALLBACK_REVENUECAT_ANDROID_API_KEY = 'goog_FzEZEzeLBArDzvqfBnQfGnzbeDj';
 
 function getRCApiKey(): string {
   const testKey = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY || FALLBACK_REVENUECAT_TEST_API_KEY;
-  if (__DEV__ || Platform.OS === 'web') return testKey;
+
+  if (Platform.OS === 'web') return testKey;
 
   const platformKey = Platform.select({
     ios: process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY || FALLBACK_REVENUECAT_IOS_API_KEY,
@@ -99,6 +100,8 @@ async function ensureRevenueCatConfigured(appUserID?: string): Promise<boolean> 
   if (rcConfigured) return true;
   if (!startRevenueCatConfiguration(appUserID)) return false;
 
+  await sleep(300);
+
   for (let attempt = 1; attempt <= CONFIGURATION_MAX_ATTEMPTS; attempt += 1) {
     try {
       const configured = await Purchases.isConfigured();
@@ -109,8 +112,13 @@ async function ensureRevenueCatConfigured(appUserID?: string): Promise<boolean> 
         return true;
       }
     } catch (error) {
-      rcConfigurationError = normalizeError(error);
-      console.log('[RevenueCat] isConfigured error:', rcConfigurationError, 'attempt:', attempt);
+      const msg = normalizeError(error);
+      console.log('[RevenueCat] isConfigured error:', msg, 'attempt:', attempt);
+      if (attempt < CONFIGURATION_MAX_ATTEMPTS) {
+        await sleep(CONFIGURATION_POLL_MS);
+        continue;
+      }
+      rcConfigurationError = msg;
     }
     await sleep(CONFIGURATION_POLL_MS);
   }
@@ -402,5 +410,3 @@ export const [RevenueCatProvider, useRevenueCat] = createContextHook(() => {
     restoreMutation.error,
   ]);
 });
-
-void startRevenueCatConfiguration();
