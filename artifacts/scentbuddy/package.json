@@ -72,6 +72,7 @@
     "zustand": "^5.0.2"
   },
   "dependencies": {
+    "@expo/config-plugins": "^55.0.8",
     "lucide-react-native": "^1.11.0",
     "react-native-appsflyer": "^6.17.9",
     "react-native-tiktok-business-sdk": "1.6.0"
