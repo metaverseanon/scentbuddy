@@ -11,8 +11,8 @@ import { RevenueCatProvider } from "@/providers/RevenueCatProvider";
 import { PaywallPromptProvider } from "@/providers/PaywallPromptProvider";
 import OnboardingScreen from "@/app/onboarding";
 import AnimatedSplash from "@/components/AnimatedSplash";
-import { trackAppOpen } from "@/lib/tiktok";
-import { trackAppsFlyerAppOpen } from "@/lib/appsflyer";
+import { initAppsFlyer } from "@/lib/appsflyer";
+import { initTikTok } from "@/lib/tiktok";
 
 
 const ONBOARDING_KEY = 'scentbuddy_onboarding_done';
@@ -45,8 +45,8 @@ function RootLayoutNav() {
       await SplashScreen.hideAsync();
     };
     void checkOnboarding();
-    void trackAppOpen();
-    void trackAppsFlyerAppOpen();
+    void initAppsFlyer();
+    void initTikTok();
   }, []);
 
   const handleSplashFinish = useCallback(() => {
