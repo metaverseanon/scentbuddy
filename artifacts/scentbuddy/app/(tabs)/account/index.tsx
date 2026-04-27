@@ -28,6 +28,7 @@ import { ThemeName, CurrencyCode, CURRENCY_SYMBOLS } from '@/lib/types';
 import { AVATAR_EMOJIS } from '@/constants/themes';
 import ProfileAvatar from '@/components/ProfileAvatar';
 import { useNotifications, sendLocalNotification } from '@/providers/NotificationProvider';
+import { usePaywallPrompt } from '@/providers/PaywallPromptProvider';
 import { useRouter } from 'expo-router';
 import { REFERRAL_GOAL } from '@/lib/referrals';
 
@@ -887,6 +888,7 @@ function EditProfileModal({ visible, onClose, profile, updateProfile, userId }: 
   userId: string;
 }) {
   const { colors } = useTheme();
+  const { suppressForegroundFor } = usePaywallPrompt();
   const [displayName, setDisplayName] = useState(profile?.display_name || '');
   const [username, setUsername] = useState(profile?.username || '');
   const [bio, setBio] = useState(profile?.bio || '');
@@ -911,6 +913,7 @@ function EditProfileModal({ visible, onClose, profile, updateProfile, userId }: 
 
   const pickImage = useCallback(async () => {
     try {
+      suppressForegroundFor(120000);
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
         Alert.alert('Permission needed', 'Please allow access to your photo library to set a profile picture.');
@@ -933,10 +936,11 @@ function EditProfileModal({ visible, onClose, profile, updateProfile, userId }: 
       console.log('Image picker error:', err);
       Alert.alert('Error', 'Could not open image picker');
     }
-  }, []);
+  }, [suppressForegroundFor]);
 
   const takePhoto = useCallback(async () => {
     try {
+      suppressForegroundFor(120000);
       const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
       if (!permissionResult.granted) {
         Alert.alert('Permission needed', 'Please allow camera access to take a profile picture.');
@@ -958,7 +962,7 @@ function EditProfileModal({ visible, onClose, profile, updateProfile, userId }: 
       console.log('Camera error:', err);
       Alert.alert('Error', 'Could not open camera');
     }
-  }, []);
+  }, [suppressForegroundFor]);
 
   const handlePickImageOption = useCallback(() => {
     if (Platform.OS === 'web') {

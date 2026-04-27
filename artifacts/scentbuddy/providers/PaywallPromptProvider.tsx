@@ -29,6 +29,11 @@ export const [PaywallPromptProvider, usePaywallPrompt] = createContextHook(() =>
   const pathnameRef = useRef(pathname);
   useEffect(() => { pathnameRef.current = pathname; }, [pathname]);
 
+  const suppressUntilRef = useRef<number>(0);
+  const suppressForegroundFor = useCallback((ms: number = 60000) => {
+    suppressUntilRef.current = Date.now() + ms;
+  }, []);
+
   const isEligible = useCallback(() => {
     if (isPro) return false;
     if (!session) return false;
@@ -95,6 +100,10 @@ export const [PaywallPromptProvider, usePaywallPrompt] = createContextHook(() =>
       const prev = lastStateRef.current;
       lastStateRef.current = next;
       if ((prev === 'background' || prev === 'inactive') && next === 'active') {
+        if (Date.now() < suppressUntilRef.current) {
+          console.log('[PaywallPrompt] Foreground trigger suppressed');
+          return;
+        }
         void maybeShow('app-foreground');
       }
     });
@@ -104,5 +113,6 @@ export const [PaywallPromptProvider, usePaywallPrompt] = createContextHook(() =>
   return useMemo(() => ({
     showPaywallIfEligible: () => maybeShow('manual'),
     openPaywall: () => router.push('/paywall'),
-  }), [maybeShow, router]);
+    suppressForegroundFor,
+  }), [maybeShow, router, suppressForegroundFor]);
 });
