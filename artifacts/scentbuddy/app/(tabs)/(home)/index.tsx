@@ -344,7 +344,7 @@ export default function HomeScreen() {
           <View style={styles.headerLeft}>
             <Text style={[styles.greeting, { color: colors.subtext }]}>{getGreeting()}</Text>
             <Text style={[styles.username, { color: colors.text }]} numberOfLines={1}>
-              {profile?.display_name || profile?.username || 'Fragrance Lover'}
+              {profile?.username || profile?.display_name || 'Fragrance Lover'}
             </Text>
           </View>
           <View style={styles.headerIcons}>
