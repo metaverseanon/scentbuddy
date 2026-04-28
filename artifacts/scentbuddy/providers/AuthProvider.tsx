@@ -64,7 +64,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const signUpMutation = useMutation({
     mutationFn: async ({ email, password, username, displayName, referralCode }: { email: string; password: string; username: string; displayName: string; referralCode?: string }) => {
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            username,
+            display_name: displayName || username,
+          },
+        },
+      });
       if (error) throw error;
       if (data.user) {
         let quizResults: QuizResults | null = null;
@@ -96,7 +105,10 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           profileData.scent_quiz = quizResults;
         }
 
-        await supabase.from('profiles').upsert(profileData);
+        const { error: upsertError } = await supabase.from('profiles').upsert(profileData);
+        if (upsertError) {
+          console.log('[Auth] Profile upsert failed (likely RLS pre-confirmation), trigger should have set basics:', upsertError.message);
+        }
 
         if (quizResults) {
           try {
