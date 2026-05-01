@@ -10,6 +10,7 @@ const NOTIFICATION_SETTINGS_KEY = 'scentbuddy_notification_settings';
 const DIARY_REMINDER_ID = 'diary-daily-reminder';
 const STREAK_REMINDER_ID = 'streak-morning-reminder';
 const WEEKLY_RECAP_ID = 'weekly-recap-reminder';
+const MONTHLY_WRAPPED_ID = 'monthly-wrapped-reminder';
 const FORGOTTEN_BOTTLES_ID = 'forgotten-bottles-reminder';
 const PUSH_TOKEN_KEY = 'scentbuddy_push_token';
 const MILESTONE_CHECK_KEY = 'scentbuddy_last_milestone_count';
@@ -25,6 +26,7 @@ export interface NotificationSettings {
   streakReminders: boolean;
   forgottenBottles: boolean;
   weeklyRecap: boolean;
+  monthlyWrapped: boolean;
   quizFollowUps: boolean;
 }
 
@@ -37,6 +39,7 @@ const DEFAULT_SETTINGS: NotificationSettings = {
   streakReminders: true,
   forgottenBottles: true,
   weeklyRecap: true,
+  monthlyWrapped: true,
   quizFollowUps: true,
 };
 
@@ -292,6 +295,68 @@ async function cancelWeeklyRecap() {
   }
 }
 
+async function scheduleMonthlyWrapped() {
+  if (Platform.OS === 'web' || !Notifications) return;
+
+  try {
+    await Notifications.cancelScheduledNotificationAsync(MONTHLY_WRAPPED_ID).catch(() => {});
+
+    const now = new Date();
+    const nextFire = new Date(now.getFullYear(), now.getMonth() + 1, 1, 10, 0, 0, 0);
+
+    await Notifications.scheduleNotificationAsync({
+      identifier: MONTHLY_WRAPPED_ID,
+      content: {
+        title: 'Your Fragrance Month is here \u2728',
+        body: 'See what you wore, your top houses, palette, and vibe \u2014 all wrapped in a shareable card.',
+        sound: 'default',
+        data: { type: 'monthly_wrapped' },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+        day: 1,
+        hour: 10,
+        minute: 0,
+        repeats: true,
+      } as any,
+    });
+
+    console.log('[PUSH] Monthly Wrapped scheduled, next fire approx:', nextFire.toISOString());
+  } catch (err) {
+    console.log('[PUSH] Error scheduling monthly wrapped:', err);
+    try {
+      const now = new Date();
+      const nextFire = new Date(now.getFullYear(), now.getMonth() + 1, 1, 10, 0, 0, 0);
+      await Notifications.scheduleNotificationAsync({
+        identifier: MONTHLY_WRAPPED_ID,
+        content: {
+          title: 'Your Fragrance Month is here \u2728',
+          body: 'See what you wore, your top houses, palette, and vibe \u2014 all wrapped in a shareable card.',
+          sound: 'default',
+          data: { type: 'monthly_wrapped' },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: nextFire,
+        },
+      });
+      console.log('[PUSH] Monthly Wrapped fallback (one-shot) scheduled for:', nextFire.toISOString());
+    } catch (fallbackErr) {
+      console.log('[PUSH] Monthly Wrapped fallback also failed:', fallbackErr);
+    }
+  }
+}
+
+async function cancelMonthlyWrapped() {
+  if (Platform.OS === 'web' || !Notifications) return;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(MONTHLY_WRAPPED_ID);
+    console.log('[PUSH] Monthly Wrapped cancelled');
+  } catch (err) {
+    console.log('[PUSH] Error cancelling monthly wrapped:', err);
+  }
+}
+
 async function scheduleForgottenBottles() {
   if (Platform.OS === 'web' || !Notifications) return;
 
@@ -519,6 +584,12 @@ export const [NotificationProvider, useNotifications] = createContextHook(() => 
         await cancelWeeklyRecap();
       }
 
+      if (newSettings.monthlyWrapped) {
+        await scheduleMonthlyWrapped();
+      } else {
+        await cancelMonthlyWrapped();
+      }
+
       if (newSettings.forgottenBottles) {
         await scheduleForgottenBottles();
       } else {
@@ -585,6 +656,10 @@ export const [NotificationProvider, useNotifications] = createContextHook(() => 
             await scheduleWeeklyRecap();
           }
           if (cancelled) return;
+          if (settings.monthlyWrapped) {
+            await scheduleMonthlyWrapped();
+          }
+          if (cancelled) return;
           if (settings.forgottenBottles) {
             await scheduleForgottenBottles();
           }
@@ -623,6 +698,8 @@ export const [NotificationProvider, useNotifications] = createContextHook(() => 
           router.push('/diary');
         } else if (data?.type === 'weekly_recap') {
           router.push('/weekly-recap' as any);
+        } else if (data?.type === 'monthly_wrapped') {
+          router.push('/monthly-wrapped' as any);
         }
       });
     }
@@ -637,7 +714,7 @@ export const [NotificationProvider, useNotifications] = createContextHook(() => 
         responseListener.current.remove();
       }
     };
-  }, [user?.id, settings.diaryReminder, settings.streakReminders, settings.weeklyRecap, settings.forgottenBottles, settings.goalReminders, settings.collectionMilestones, settings.quizFollowUps]);
+  }, [user?.id, settings.diaryReminder, settings.streakReminders, settings.weeklyRecap, settings.monthlyWrapped, settings.forgottenBottles, settings.goalReminders, settings.collectionMilestones, settings.quizFollowUps]);
 
   useEffect(() => {
     let isCleanedUp = false;

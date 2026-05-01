@@ -16,7 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { Bell, MagnifyingGlass, X, TrendUp, ArrowSquareOut, Flame, Drop, Fire, ClipboardText, Binoculars, Users, Trophy, User, SprayBottle, Lightning, Check, ArrowRight } from 'phosphor-react-native';
+import { Bell, MagnifyingGlass, X, TrendUp, ArrowSquareOut, Flame, Drop, Fire, ClipboardText, Binoculars, Users, Trophy, User, SprayBottle, Lightning, Check, ArrowRight, Heart, EyeSlash, CalendarHeart } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { z } from 'zod';
@@ -991,6 +991,65 @@ export default function CommunityScreen() {
           </View>
         )}
 
+        <View style={styles.discoverySection}>
+          <Text style={[styles.discoveryHeader, { color: colors.text }]}>Social Games & Insights</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.discoveryRow}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.discoveryCard}
+              onPress={() => { void Haptics.selectionAsync(); router.push('/twin-finder'); }}
+            >
+              <LinearGradient
+                colors={['#e87090', '#c9577a']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.discoveryIconBox}>
+                <Heart size={22} color="#fff" weight="fill" />
+              </View>
+              <Text style={styles.discoveryTitle}>Twin Finder</Text>
+              <Text style={styles.discoverySubtitle}>Find users with your scent DNA</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.discoveryCard}
+              onPress={() => { void Haptics.selectionAsync(); router.push('/blind-test'); }}
+            >
+              <LinearGradient
+                colors={['#5d3a8a', '#3d2766']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.discoveryIconBox}>
+                <EyeSlash size={22} color="#fff" weight="fill" />
+              </View>
+              <Text style={styles.discoveryTitle}>Blind Test</Text>
+              <Text style={styles.discoverySubtitle}>Friends rate without seeing names</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.discoveryCard}
+              onPress={() => { void Haptics.selectionAsync(); router.push('/monthly-wrapped'); }}
+            >
+              <LinearGradient
+                colors={['#c49a6c', '#8a6a44']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.discoveryIconBox}>
+                <CalendarHeart size={22} color="#fff" weight="fill" />
+              </View>
+              <Text style={styles.discoveryTitle}>Monthly Wrapped</Text>
+              <Text style={styles.discoverySubtitle}>Your fragrance month, recapped</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        </View>
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
           {tabs.map(tab => {
             const tabColor = activeTab === tab.key ? '#fff' : colors.text;
@@ -1136,6 +1195,27 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#E74C3C',
   },
+  discoverySection: { marginBottom: 18 },
+  discoveryHeader: { fontSize: 14, fontWeight: '700' as const, paddingHorizontal: 20, marginBottom: 10, letterSpacing: 0.3 },
+  discoveryRow: { paddingHorizontal: 20, gap: 10 },
+  discoveryCard: {
+    width: 170,
+    height: 110,
+    borderRadius: 16,
+    padding: 14,
+    overflow: 'hidden',
+    justifyContent: 'space-between',
+  },
+  discoveryIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  discoveryTitle: { color: '#fff', fontSize: 14, fontWeight: '800' as const, marginTop: 4 },
+  discoverySubtitle: { color: 'rgba(255,255,255,0.85)', fontSize: 11, fontWeight: '500' as const, marginTop: 2 },
   tabRow: { paddingHorizontal: 20, gap: 8, marginBottom: 16 },
   tabChip: {
     flexDirection: 'row',

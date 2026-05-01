@@ -36,6 +36,13 @@ Fragrance tracking and discovery app originally built with Rork, migrated to Rep
 - Referrals
 - Paywall / Pro subscription via RevenueCat
 - Supabase backend for auth and data
+- **Twin Finder** (`app/twin-finder.tsx`) — finds users with the most overlap in collection (shared bottles + shared notes). Free: top 3, Pro: top 100. Server-enforced via `get_twin_matches` RPC; client cannot bypass the cap.
+- **Group Blind Test** (`app/blind-test/index.tsx`, `app/blind-test/[id].tsx`) — pick a fragrance from collection, share a blind link, friends rate notes/family without seeing the name. Server-side redaction via `get_blind_test` and `get_ratable_blind_tests` RPCs; the perfume name/brand/image are never sent to a non-creator until they have submitted a rating.
+- **Monthly Wrapped** (`app/monthly-wrapped.tsx`) — Spotify-Wrapped-style recap with shareable card via `react-native-view-shot`. Notification scheduled for 1st of every month at 10 AM via `NotificationProvider` (deep-link route: `/monthly-wrapped`).
+- **Discovery row** in Community tab linking to the three above features.
+
+### Supabase Migrations
+- `artifacts/scentbuddy/supabase/migrations/2026_05_blind_tests.sql` — creates `blind_tests`, `blind_test_ratings` tables, RLS, plus SECURITY DEFINER RPCs `get_blind_test`, `get_ratable_blind_tests`, `get_twin_matches`. Idempotent — paste into the Supabase SQL editor to apply.
 
 ### Key Source Files
 - `artifacts/scentbuddy/app/_layout.tsx` — root layout, providers, onboarding gating
