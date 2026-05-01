@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import {
   CaretLeft,
+  CaretRight,
   DownloadSimple,
   ShareNetwork,
   Sparkle,
@@ -50,6 +51,18 @@ export default function MonthlyWrappedScreen() {
   const params = useLocalSearchParams<{ offset?: string }>();
   const offset = params.offset ? parseInt(params.offset, 10) : -1;
   const { start, end, label } = useMemo(() => getMonthRange(offset), [offset]);
+
+  const goToOffset = useCallback(
+    (newOffset: number) => {
+      if (newOffset > 0) return;
+      Haptics.selectionAsync().catch(() => {});
+      router.setParams({ offset: String(newOffset) });
+    },
+    [router]
+  );
+
+  const isCurrentMonth = offset === 0;
+  const canGoForward = offset < 0;
 
   const wearsQuery = useQuery({
     queryKey: ['monthly-wrapped-wears', user?.id, start.toISOString()],
@@ -269,6 +282,32 @@ export default function MonthlyWrappedScreen() {
   const displayName =
     profile?.username || profile?.display_name || user?.email?.split('@')[0] || 'You';
 
+  const monthSwitcher = (
+    <View style={styles.monthSwitcher}>
+      <TouchableOpacity
+        onPress={() => goToOffset(offset - 1)}
+        style={styles.monthSwitcherBtn}
+        accessibilityLabel="Previous month"
+      >
+        <CaretLeft size={16} color="#f0ebe5" weight="bold" />
+      </TouchableOpacity>
+      <View style={styles.monthSwitcherLabelWrap}>
+        <Text style={styles.monthSwitcherLabel}>{label}</Text>
+        {isCurrentMonth ? (
+          <Text style={styles.monthSwitcherSub}>This month so far</Text>
+        ) : null}
+      </View>
+      <TouchableOpacity
+        onPress={() => canGoForward && goToOffset(offset + 1)}
+        style={[styles.monthSwitcherBtn, !canGoForward && styles.monthSwitcherBtnDisabled]}
+        disabled={!canGoForward}
+        accessibilityLabel="Next month"
+      >
+        <CaretRight size={16} color={canGoForward ? '#f0ebe5' : '#5a4a48'} weight="bold" />
+      </TouchableOpacity>
+    </View>
+  );
+
   if (stats.totalWears === 0 && newAdditions.length === 0) {
     return (
       <View style={[styles.container, { backgroundColor: '#0d0b08' }]}>
@@ -279,11 +318,16 @@ export default function MonthlyWrappedScreen() {
           <Text style={styles.headerTitle}>{label} Wrapped</Text>
           <View style={{ width: 40 }} />
         </View>
+        {monthSwitcher}
         <View style={styles.empty}>
           <Text style={styles.emptyEmoji}>🌙</Text>
-          <Text style={styles.emptyTitle}>A quiet month</Text>
+          <Text style={styles.emptyTitle}>
+            {isCurrentMonth ? 'Nothing logged yet' : 'A quiet month'}
+          </Text>
           <Text style={styles.emptySubtitle}>
-            We didn&apos;t see any wears or additions logged for {label}. Start logging this month and we&apos;ll wrap it up for you!
+            {isCurrentMonth
+              ? `Start logging wears in ${label} and we'll wrap them up for you in real time.`
+              : `We didn't see any wears or additions logged for ${label}. Try another month with the arrows above.`}
           </Text>
         </View>
       </View>
@@ -299,6 +343,7 @@ export default function MonthlyWrappedScreen() {
         <Text style={styles.headerTitle}>Fragrance Wrapped</Text>
         <View style={{ width: 40 }} />
       </View>
+      {monthSwitcher}
 
       <ScrollView
         contentContainerStyle={{ paddingBottom: insets.bottom + 140, paddingTop: 8 }}
@@ -481,6 +526,12 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 10 },
   headerBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1018' },
   headerTitle: { flex: 1, textAlign: 'center', color: '#f0ebe5', fontSize: 17, fontWeight: '700', letterSpacing: 0.5 },
+  monthSwitcher: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16, paddingBottom: 12, gap: 12 },
+  monthSwitcherBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#1a1018', borderWidth: 1, borderColor: '#2a1a28' },
+  monthSwitcherBtnDisabled: { opacity: 0.4 },
+  monthSwitcherLabelWrap: { alignItems: 'center', minWidth: 160 },
+  monthSwitcherLabel: { color: '#f0ebe5', fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
+  monthSwitcherSub: { color: '#c49a6c', fontSize: 11, fontWeight: '500', marginTop: 2, letterSpacing: 0.3 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
   emptyEmoji: { fontSize: 48 },
   emptyTitle: { color: '#f0ebe5', fontSize: 22, fontWeight: '700', textAlign: 'center' },
