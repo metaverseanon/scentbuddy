@@ -11,6 +11,7 @@ import { RevenueCatProvider } from "@/providers/RevenueCatProvider";
 import { PaywallPromptProvider } from "@/providers/PaywallPromptProvider";
 import OnboardingScreen from "@/app/onboarding";
 import AnimatedSplash from "@/components/AnimatedSplash";
+import WhatsNewModal from "@/components/WhatsNewModal";
 import { initAppsFlyer } from "@/lib/appsflyer";
 import { initTikTok } from "@/lib/tiktok";
 
@@ -92,6 +93,7 @@ function RootLayoutNav() {
         <Stack.Screen name="referrals" options={{ headerShown: false, presentation: "card" }} />
         <Stack.Screen name="paywall" options={{ headerShown: false, presentation: "fullScreenModal" }} />
       </Stack>
+      {!showSplash && <WhatsNewModal />}
       {showSplash && <AnimatedSplash onFinish={handleSplashFinish} />}
     </>
   );
