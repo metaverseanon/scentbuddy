@@ -33,6 +33,7 @@ export interface Referral {
     username: string | null;
     avatar_emoji: string | null;
     avatar_url: string | null;
+    is_pro: boolean | null;
   };
 }
 
@@ -158,7 +159,8 @@ export async function fetchReferralsList(userId: string): Promise<Referral[]> {
         display_name,
         username,
         avatar_emoji,
-        avatar_url
+        avatar_url,
+        is_pro
       )
     `)
     .eq('referrer_id', userId)

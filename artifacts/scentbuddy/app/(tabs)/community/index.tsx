@@ -26,6 +26,7 @@ import { supabase, forceHttps } from '@/lib/supabase';
 import { apiUrl } from '@/lib/api';
 import { TodayWear, ActivityFeedItem, Profile, Notification, CollectionItem, TrendingItem } from '@/lib/types';
 import ProfileAvatar from '@/components/ProfileAvatar';
+import ProBadge from '@/components/ProBadge';
 import { createFollowNotification, sendPushToUser } from '@/lib/notifications';
 import { getTodayChallenge } from '@/constants/daily-challenges';
 
@@ -388,9 +389,10 @@ export default function CommunityScreen() {
         console.log('Challenge fetch existing error:', fetchError);
       }
 
+      let rowId: string | null = null;
       if (existing?.id) {
         console.log('Updating existing today_wear row:', existing.id);
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('today_wears')
           .update({
             perfume_name: item.perfume_name,
@@ -398,13 +400,12 @@ export default function CommunityScreen() {
             image_url: item.image_url,
             note: noteText,
           })
-          .eq('id', existing.id)
-          .select('*');
+          .eq('id', existing.id);
         if (error) {
           console.log('Challenge pick update error:', error);
           throw new Error(error.message);
         }
-        console.log('Challenge response updated:', data);
+        rowId = existing.id;
       } else {
         const { data, error } = await supabase.from('today_wears').insert({
           user_id: user.id,
@@ -413,17 +414,35 @@ export default function CommunityScreen() {
           image_url: item.image_url,
           date: today,
           note: noteText,
-        }).select('*');
+        }).select('id').single();
         if (error) {
           console.log('Challenge pick insert error:', error);
           throw new Error(error.message);
         }
-        console.log('Challenge response inserted:', data);
+        rowId = data?.id ?? null;
       }
+
+      if (!rowId) throw new Error('Failed to save pick');
+
+      const { data: fullRow, error: fullErr } = await supabase
+        .from('today_wears')
+        .select('*, profiles(*)')
+        .eq('id', rowId)
+        .single();
+      if (fullErr || !fullRow) {
+        console.log('Challenge fetch full row error:', fullErr);
+        throw new Error(fullErr?.message ?? 'Failed to load pick');
+      }
+      console.log('Challenge response saved:', fullRow);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return fullRow as TodayWear;
     },
-    onSuccess: () => {
-      console.log('Challenge mutation onSuccess - invalidating today-wears');
+    onSuccess: (newRow) => {
+      console.log('Challenge mutation onSuccess - merging row into cache');
+      queryClient.setQueryData<TodayWear[]>(['today-wears'], (old) => {
+        const filtered = (old ?? []).filter(w => w.id !== newRow.id);
+        return [newRow, ...filtered];
+      });
       void queryClient.invalidateQueries({ queryKey: ['today-wears'] });
       setShowChallengePicker(false);
     },
@@ -440,8 +459,15 @@ export default function CommunityScreen() {
   }, [todayWearsQuery.data, todayChallenge.title]);
 
   const myResponse = useMemo(() => {
-    return challengeResponses.find(w => w.user_id === user?.id);
-  }, [challengeResponses, user?.id]);
+    const inChallenge = challengeResponses.find(w => w.user_id === user?.id);
+    if (inChallenge) return inChallenge;
+    const wears = todayWearsQuery.data ?? [];
+    const myWearToday = wears.find(w => w.user_id === user?.id);
+    if (myWearToday && (myWearToday.note?.includes(CHALLENGE_NOTE_PREFIX) || postChallengeMutation.isSuccess)) {
+      return myWearToday;
+    }
+    return undefined;
+  }, [challengeResponses, todayWearsQuery.data, user?.id, postChallengeMutation.isSuccess]);
 
   const markAllReadMutation = useMutation({
     mutationFn: async () => {
@@ -694,10 +720,13 @@ export default function CommunityScreen() {
               >
                 <ProfileAvatar avatarUrl={(wear.profiles as any)?.avatar_url} avatarEmoji={(wear.profiles as any)?.avatar_emoji} size={44} backgroundColor={colors.chip} />
                 <View style={styles.challengeResponseContent}>
-                  <Text style={[styles.challengeResponseUser, { color: colors.text }]}>
-                    {(wear.profiles as any)?.display_name || (wear.profiles as any)?.username || 'User'}
-                    {wear.user_id === user?.id ? ' (you)' : ''}
-                  </Text>
+                  <View style={styles.userNameRow}>
+                    <Text style={[styles.challengeResponseUser, { color: colors.text }]}>
+                      {(wear.profiles as any)?.display_name || (wear.profiles as any)?.username || 'User'}
+                      {wear.user_id === user?.id ? ' (you)' : ''}
+                    </Text>
+                    {(wear.profiles as any)?.is_pro && <ProBadge size="xs" />}
+                  </View>
                   <View style={[styles.challengeResponsePerfume, { backgroundColor: colors.chip }]}>
                     {wear.image_url && (
                       <Image source={{ uri: forceHttps(wear.image_url) ?? undefined }} style={styles.challengeResponseImage} resizeMode="contain" />
@@ -761,9 +790,12 @@ export default function CommunityScreen() {
           <View key={wear.id} style={[styles.wearCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <ProfileAvatar avatarUrl={(wear.profiles as any)?.avatar_url} avatarEmoji={(wear.profiles as any)?.avatar_emoji} size={40} backgroundColor={colors.chip} />
             <View style={styles.wearCardContent}>
-              <Text style={[styles.wearCardUser, { color: colors.text }]}>
-                {(wear.profiles as any)?.display_name || (wear.profiles as any)?.username || 'User'}
-              </Text>
+              <View style={styles.userNameRow}>
+                <Text style={[styles.wearCardUser, { color: colors.text }]}>
+                  {(wear.profiles as any)?.display_name || (wear.profiles as any)?.username || 'User'}
+                </Text>
+                {(wear.profiles as any)?.is_pro && <ProBadge size="xs" />}
+              </View>
               <View style={[styles.wearCardPerfume, { backgroundColor: colors.chip }]}>
                 {wear.image_url && (
                   <Image source={{ uri: forceHttps(wear.image_url) ?? undefined }} style={styles.wearCardImage} resizeMode="contain" />
@@ -795,10 +827,13 @@ export default function CommunityScreen() {
           <View key={item.id} style={[styles.feedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <ProfileAvatar avatarUrl={(item.profiles as any)?.avatar_url} avatarEmoji={(item.profiles as any)?.avatar_emoji} size={40} backgroundColor={colors.chip} />
             <View style={styles.feedContent}>
-              <Text style={[styles.feedText, { color: colors.text }]}>
-                <Text style={{ fontWeight: '700' as const }}>{(item.profiles as any)?.username || 'User'}</Text>
-                {' '}{item.activity_type === 'added_perfume' ? 'added' : item.activity_type === 'reviewed_perfume' ? 'reviewed' : 'is wearing'}
-              </Text>
+              <View style={styles.userNameRow}>
+                <Text style={[styles.feedText, { color: colors.text }]}>
+                  <Text style={{ fontWeight: '700' as const }}>{(item.profiles as any)?.username || 'User'}</Text>
+                  {' '}{item.activity_type === 'added_perfume' ? 'added' : item.activity_type === 'reviewed_perfume' ? 'reviewed' : 'is wearing'}
+                </Text>
+                {(item.profiles as any)?.is_pro && <ProBadge size="xs" />}
+              </View>
               {item.perfume_name && (
                 <View style={[styles.feedPerfume, { backgroundColor: colors.chip }]}>
                   <View style={[styles.feedPerfumeIcon, { backgroundColor: colors.accent + '20' }]}>
@@ -845,7 +880,10 @@ export default function CommunityScreen() {
       >
         <ProfileAvatar avatarUrl={u.avatar_url} avatarEmoji={u.avatar_emoji} size={48} backgroundColor={colors.chip} />
         <View style={styles.userInfo}>
-          <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>{u.display_name || u.username}</Text>
+          <View style={styles.userNameRow}>
+            <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>{u.display_name || u.username}</Text>
+            {u.is_pro && <ProBadge size="xs" />}
+          </View>
           <Text style={[styles.userHandle, { color: colors.subtext }]} numberOfLines={1}>@{u.username}</Text>
           {reason ? (
             <View style={[styles.reasonChip, { backgroundColor: colors.accent + '18', borderColor: colors.accent + '30' }]}>
@@ -976,7 +1014,10 @@ export default function CommunityScreen() {
           >
             <ProfileAvatar avatarUrl={u.avatar_url} avatarEmoji={u.avatar_emoji} size={48} backgroundColor={colors.chip} />
             <View style={styles.userInfo}>
-              <Text style={[styles.userName, { color: colors.text }]}>{u.display_name || u.username}</Text>
+              <View style={styles.userNameRow}>
+                <Text style={[styles.userName, { color: colors.text }]}>{u.display_name || u.username}</Text>
+                {u.is_pro && <ProBadge size="xs" />}
+              </View>
               <Text style={[styles.userHandle, { color: colors.subtext }]}>@{u.username}</Text>
             </View>
             <TouchableOpacity
@@ -1029,6 +1070,7 @@ export default function CommunityScreen() {
                 <View style={styles.leaderInfo}>
                   <View style={styles.leaderNameRow}>
                     <Text style={[styles.userName, { color: colors.text }]}>{u?.display_name || u?.username || 'User'}</Text>
+                    {u?.is_pro && <ProBadge size="xs" />}
                     {isMe && (
                       <View style={[styles.youBadge, { backgroundColor: colors.accent + '20' }]}>
                         <Text style={[styles.youBadgeText, { color: colors.accent }]}>YOU</Text>
@@ -1561,6 +1603,7 @@ const styles = StyleSheet.create({
   userAvatar: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   userAvatarText: { fontSize: 22 },
   userInfo: { flex: 1 },
+  userNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   userName: { fontSize: 16, fontWeight: '700' as const },
   userHandle: { fontSize: 13, marginTop: 2 },
   followBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },

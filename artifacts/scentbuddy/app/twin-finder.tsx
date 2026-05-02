@@ -18,6 +18,7 @@ import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import { usePaywallPrompt } from '@/providers/PaywallPromptProvider';
 import { supabase } from '@/lib/supabase';
 import ProfileAvatar from '@/components/ProfileAvatar';
+import ProBadge from '@/components/ProBadge';
 import FeatureSpotlight from '@/components/FeatureSpotlight';
 
 const FREE_LIMIT = 3;
@@ -42,6 +43,7 @@ type TwinMatch = {
   username: string | null;
   avatarUrl: string | null;
   avatarEmoji: string | null;
+  isPro: boolean;
   sharedBottles: number;
   sharedNotes: number;
   scorePct: number;
@@ -105,6 +107,7 @@ export default function TwinFinderScreen() {
       username: m.username,
       avatarUrl: m.avatar_url,
       avatarEmoji: m.avatar_emoji,
+      isPro: !!m.is_pro,
       sharedBottles: m.shared_bottles,
       sharedNotes: m.shared_notes,
       scorePct: topRaw > 0 ? Math.min(100, Math.max(1, Math.round((m.score / topRaw) * 100))) : 0,
@@ -250,9 +253,12 @@ function TwinCard({ match, rank, colors, onPress }: { match: TwinMatch; rank: nu
         </View>
         <ProfileAvatar avatarUrl={match.avatarUrl} avatarEmoji={match.avatarEmoji} size={48} />
         <View style={styles.matchInfo}>
-          <Text style={[styles.matchName, { color: colors.text }]} numberOfLines={1}>
-            {match.displayName || match.username || 'Anonymous'}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Text style={[styles.matchName, { color: colors.text }]} numberOfLines={1}>
+              {match.displayName || match.username || 'Anonymous'}
+            </Text>
+            {match.isPro && <ProBadge size="xs" />}
+          </View>
           <Text style={[styles.matchHandle, { color: colors.subtext }]} numberOfLines={1}>
             @{match.username || 'user'}
           </Text>

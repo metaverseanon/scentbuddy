@@ -29,6 +29,7 @@ import {
 } from '@/lib/referrals';
 import type { Referral } from '@/lib/referrals';
 import ProfileAvatar from '@/components/ProfileAvatar';
+import ProBadge from '@/components/ProBadge';
 
 export default function ReferralsScreen() {
   const { user, profile } = useAuth();
@@ -332,9 +333,12 @@ function ReferralRow({ referral, colors }: { referral: Referral; colors: any }) 
         backgroundColor={colors.chip}
       />
       <View style={styles.referralInfo}>
-        <Text style={[styles.referralName, { color: colors.text }]}>
-          {referred?.display_name || referred?.username || 'User'}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <Text style={[styles.referralName, { color: colors.text }]}>
+            {referred?.display_name || referred?.username || 'User'}
+          </Text>
+          {referred?.is_pro && <ProBadge size="xs" />}
+        </View>
         <Text style={[styles.referralDate, { color: colors.subtext }]}>{dateStr}</Text>
       </View>
       <View style={[styles.statusBadge, { backgroundColor: isCompleted ? '#34c75915' : colors.chip }]}>

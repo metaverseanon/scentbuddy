@@ -24,6 +24,7 @@ import { supabase, forceHttps } from '@/lib/supabase';
 import { Profile, CollectionItem, WishlistItem } from '@/lib/types';
 import { createSniffNotification, createFollowNotification, sendPushToUser } from '@/lib/notifications';
 import ProfileAvatar from '@/components/ProfileAvatar';
+import ProBadge from '@/components/ProBadge';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -255,7 +256,10 @@ export default function UserProfileScreen() {
                 backgroundColor={colors.card}
               />
             </View>
-            <Text style={styles.displayName}>{profileData.display_name || profileData.username || 'User'}</Text>
+            <View style={styles.displayNameRow}>
+              <Text style={styles.displayName}>{profileData.display_name || profileData.username || 'User'}</Text>
+              {profileData.is_pro && <ProBadge size="md" />}
+            </View>
             <Text style={styles.handle}>@{profileData.username || 'unknown'}</Text>
             {profileData.bio && (
               <Text style={[styles.bio, { color: 'rgba(255,255,255,0.85)' }]}>{profileData.bio}</Text>
@@ -743,6 +747,7 @@ const styles = StyleSheet.create({
     elevation: 8,
     marginBottom: 14,
   },
+  displayNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 },
   displayName: {
     fontSize: 24,
     fontWeight: '700' as const,
