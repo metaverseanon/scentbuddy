@@ -43,6 +43,7 @@ export default function CommunityScreen() {
   const [showWearPicker, setShowWearPicker] = useState(false);
   const [showChallengePicker, setShowChallengePicker] = useState(false);
   const [searchUsers, setSearchUsers] = useState('');
+  const [discoverFilter, setDiscoverFilter] = useState<'suggested' | 'new' | 'collectors' | 'popular'>('suggested');
   const challengePulse = useRef(new Animated.Value(1)).current;
   const challengeGlow = useRef(new Animated.Value(0)).current;
 
@@ -274,6 +275,34 @@ export default function CommunityScreen() {
     enabled: !!user?.id,
   });
 
+  // Aggregations for the Discover recommendations. Only fetched when the
+  // Discover tab is open to keep the rest of Community fast.
+  const allFollowsAggQuery = useQuery({
+    queryKey: ['all-follows-agg'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('follows')
+        .select('follower_id, following_id');
+      if (error) throw error;
+      return (data ?? []) as { follower_id: string; following_id: string }[];
+    },
+    enabled: activeTab === 'discover',
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const allCollectionsAggQuery = useQuery({
+    queryKey: ['all-collections-agg'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('user_collections')
+        .select('user_id');
+      if (error) throw error;
+      return (data ?? []) as { user_id: string }[];
+    },
+    enabled: activeTab === 'discover',
+    staleTime: 1000 * 60 * 5,
+  });
+
   const followMutation = useMutation({
     mutationFn: async (targetId: string) => {
       if (!user?.id) throw new Error('Not logged in');
@@ -444,13 +473,131 @@ export default function CommunityScreen() {
     return (usersQuery.data ?? []).filter(u => ids.includes(u.id));
   }, [usersQuery.data, followsQuery.data]);
 
+  // Per-user aggregations: follower counts + collection sizes.
+  const userStats = useMemo(() => {
+    const followers: Record<string, number> = {};
+    const collections: Record<string, number> = {};
+    (allFollowsAggQuery.data ?? []).forEach(f => {
+      followers[f.following_id] = (followers[f.following_id] || 0) + 1;
+    });
+    (allCollectionsAggQuery.data ?? []).forEach(c => {
+      collections[c.user_id] = (collections[c.user_id] || 0) + 1;
+    });
+    return { followers, collections };
+  }, [allFollowsAggQuery.data, allCollectionsAggQuery.data]);
+
+  // Shared follows between me and each candidate: count of accounts that
+  // *both* the candidate and I follow. This is the standard "mutual
+  // connections" definition (think LinkedIn / Twitter "X in common").
+  const mutualFollowsByUser = useMemo(() => {
+    const myFollowingSet = new Set(followsQuery.data ?? []);
+    if (myFollowingSet.size === 0) return {} as Record<string, number>;
+    const counts: Record<string, number> = {};
+    (allFollowsAggQuery.data ?? []).forEach(f => {
+      // f means: f.follower_id follows f.following_id.
+      // If I also follow f.following_id, then that account is a shared
+      // follow between me and f.follower_id.
+      if (myFollowingSet.has(f.following_id)) {
+        counts[f.follower_id] = (counts[f.follower_id] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [allFollowsAggQuery.data, followsQuery.data]);
+
+  // Build the discover recommendation list. Each entry has the user, a
+  // primary numeric score for sorting, and a short "reason" chip for the UI.
+  type Rec = { user: Profile; score: number; reason: string };
+  const recommendations = useMemo<Rec[]>(() => {
+    const allUsers = usersQuery.data ?? [];
+    const followingSet = new Set(followsQuery.data ?? []);
+    const now = Date.now();
+    const candidates = allUsers.filter(u => u.id !== user?.id && !followingSet.has(u.id));
+
+    const recsFor = (filter: typeof discoverFilter): Rec[] => {
+      if (filter === 'new') {
+        return candidates
+          .map(u => {
+            const ageMs = now - new Date(u.created_at).getTime();
+            const ageDays = Math.max(0, Math.floor(ageMs / (1000 * 60 * 60 * 24)));
+            const reason =
+              ageDays === 0 ? 'Joined today' :
+              ageDays === 1 ? 'Joined yesterday' :
+              ageDays < 7 ? `Joined ${ageDays}d ago` :
+              `Joined ${Math.floor(ageDays / 7)}w ago`;
+            return { user: u, score: -ageDays, reason };
+          })
+          .filter(r => -r.score <= 30)
+          .sort((a, b) => b.score - a.score);
+      }
+      if (filter === 'collectors') {
+        return candidates
+          .map(u => {
+            const count = userStats.collections[u.id] || 0;
+            return {
+              user: u,
+              score: count,
+              reason: count > 0 ? `${count} bottle${count === 1 ? '' : 's'}` : 'New collector',
+            };
+          })
+          .filter(r => r.score > 0)
+          .sort((a, b) => b.score - a.score);
+      }
+      if (filter === 'popular') {
+        return candidates
+          .map(u => {
+            const count = userStats.followers[u.id] || 0;
+            return {
+              user: u,
+              score: count,
+              reason: count > 0 ? `${count} follower${count === 1 ? '' : 's'}` : 'Rising',
+            };
+          })
+          .filter(r => r.score > 0)
+          .sort((a, b) => b.score - a.score);
+      }
+      // Suggested: blended score across mutuals, popularity, recency, collection size
+      return candidates
+        .map(u => {
+          const mutuals = mutualFollowsByUser[u.id] || 0;
+          const followers = userStats.followers[u.id] || 0;
+          const bottles = userStats.collections[u.id] || 0;
+          const ageDays = Math.max(0, Math.floor((now - new Date(u.created_at).getTime()) / (1000 * 60 * 60 * 24)));
+          const recencyBoost = ageDays < 14 ? 6 : ageDays < 30 ? 3 : 0;
+          const score =
+            mutuals * 8 +
+            Math.min(followers, 20) * 1.2 +
+            Math.min(bottles, 30) * 0.6 +
+            recencyBoost;
+          let reason: string;
+          if (mutuals > 0) {
+            reason = `${mutuals} in common`;
+          } else if (recencyBoost >= 6) {
+            reason = ageDays === 0 ? 'Just joined' : `Joined ${ageDays}d ago`;
+          } else if (followers >= 3) {
+            reason = `${followers} follower${followers === 1 ? '' : 's'}`;
+          } else if (bottles > 0) {
+            reason = `${bottles} bottle${bottles === 1 ? '' : 's'}`;
+          } else {
+            reason = 'New on ScentBuddy';
+          }
+          return { user: u, score, reason };
+        })
+        .filter(r => r.score > 0)
+        .sort((a, b) => b.score - a.score);
+    };
+
+    return recsFor(discoverFilter).slice(0, 50);
+  }, [usersQuery.data, followsQuery.data, user?.id, discoverFilter, userStats, mutualFollowsByUser]);
+
   const onRefresh = useCallback(() => {
     void todayWearsQuery.refetch();
     void feedQuery.refetch();
     void usersQuery.refetch();
     void socialTrendsQuery.refetch();
     void trendsQuery.refetch();
-  }, [todayWearsQuery, feedQuery, usersQuery, socialTrendsQuery, trendsQuery]);
+    void allFollowsAggQuery.refetch();
+    void allCollectionsAggQuery.refetch();
+  }, [todayWearsQuery, feedQuery, usersQuery, socialTrendsQuery, trendsQuery, allFollowsAggQuery, allCollectionsAggQuery]);
 
   const renderChallenge = () => {
     const glowOpacity = challengeGlow.interpolate({
@@ -671,47 +818,139 @@ export default function CommunityScreen() {
     </>
   );
 
-  const renderDiscover = () => (
-    <>
-      <View style={[styles.searchBarContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
-        <MagnifyingGlass size={18} color={colors.subtext} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search users..."
-          placeholderTextColor={colors.subtext}
-          value={searchUsers}
-          onChangeText={setSearchUsers}
-        />
-      </View>
-      {filteredUsers.map(u => (
+  const renderDiscover = () => {
+    const isSearching = searchUsers.trim().length > 0;
+    const aggLoading =
+      usersQuery.isLoading ||
+      allFollowsAggQuery.isLoading ||
+      allCollectionsAggQuery.isLoading;
+    const aggError =
+      !!allFollowsAggQuery.error ||
+      !!allCollectionsAggQuery.error ||
+      !!usersQuery.error;
+
+    const filterPills: { key: typeof discoverFilter; label: string; icon: React.ReactNode }[] = [
+      { key: 'suggested', label: 'Suggested', icon: <Lightning size={14} color={discoverFilter === 'suggested' ? '#fff' : colors.subtext} weight={discoverFilter === 'suggested' ? 'fill' : 'regular'} /> },
+      { key: 'new', label: 'New', icon: <Users size={14} color={discoverFilter === 'new' ? '#fff' : colors.subtext} weight={discoverFilter === 'new' ? 'fill' : 'regular'} /> },
+      { key: 'collectors', label: 'Collectors', icon: <SprayBottle size={14} color={discoverFilter === 'collectors' ? '#fff' : colors.subtext} weight={discoverFilter === 'collectors' ? 'fill' : 'regular'} /> },
+      { key: 'popular', label: 'Popular', icon: <TrendUp size={14} color={discoverFilter === 'popular' ? '#fff' : colors.subtext} weight={discoverFilter === 'popular' ? 'fill' : 'regular'} /> },
+    ];
+
+    const renderUserRow = (u: Profile, reason?: string) => (
+      <TouchableOpacity
+        key={u.id}
+        style={[styles.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+        activeOpacity={0.7}
+        onPress={() => router.push({ pathname: '/user-profile', params: { userId: u.id } })}
+      >
+        <ProfileAvatar avatarUrl={u.avatar_url} avatarEmoji={u.avatar_emoji} size={48} backgroundColor={colors.chip} />
+        <View style={styles.userInfo}>
+          <Text style={[styles.userName, { color: colors.text }]} numberOfLines={1}>{u.display_name || u.username}</Text>
+          <Text style={[styles.userHandle, { color: colors.subtext }]} numberOfLines={1}>@{u.username}</Text>
+          {reason ? (
+            <View style={[styles.reasonChip, { backgroundColor: colors.accent + '18', borderColor: colors.accent + '30' }]}>
+              <Text style={[styles.reasonChipText, { color: colors.accent }]} numberOfLines={1}>{reason}</Text>
+            </View>
+          ) : null}
+        </View>
         <TouchableOpacity
-          key={u.id}
-          style={[styles.userCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-          activeOpacity={0.7}
-          onPress={() => router.push({ pathname: '/user-profile', params: { userId: u.id } })}
+          style={[styles.followBtn, {
+            backgroundColor: followingIds.includes(u.id) ? colors.chip : colors.accent,
+            borderColor: followingIds.includes(u.id) ? colors.border : colors.accent,
+          }]}
+          onPress={(e) => { e.stopPropagation(); followMutation.mutate(u.id); }}
         >
-          <ProfileAvatar avatarUrl={u.avatar_url} avatarEmoji={u.avatar_emoji} size={48} backgroundColor={colors.chip} />
-          <View style={styles.userInfo}>
-            <Text style={[styles.userName, { color: colors.text }]}>{u.display_name || u.username}</Text>
-            <Text style={[styles.userHandle, { color: colors.subtext }]}>@{u.username}</Text>
-          </View>
-          <TouchableOpacity
-            style={[styles.followBtn, {
-              backgroundColor: followingIds.includes(u.id) ? colors.chip : colors.accent,
-              borderColor: followingIds.includes(u.id) ? colors.border : colors.accent,
-            }]}
-            onPress={(e) => { e.stopPropagation(); followMutation.mutate(u.id); }}
-          >
-            <Text style={[styles.followBtnText, {
-              color: followingIds.includes(u.id) ? colors.text : '#fff',
-            }]}>
-              {followingIds.includes(u.id) ? 'Following' : 'Follow'}
-            </Text>
-          </TouchableOpacity>
+          <Text style={[styles.followBtnText, {
+            color: followingIds.includes(u.id) ? colors.text : '#fff',
+          }]}>
+            {followingIds.includes(u.id) ? 'Following' : 'Follow'}
+          </Text>
         </TouchableOpacity>
-      ))}
-    </>
-  );
+      </TouchableOpacity>
+    );
+
+    return (
+      <>
+        <View style={[styles.searchBarContainer, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <MagnifyingGlass size={18} color={colors.subtext} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder="Search users..."
+            placeholderTextColor={colors.subtext}
+            value={searchUsers}
+            onChangeText={setSearchUsers}
+          />
+        </View>
+
+        {isSearching ? (
+          filteredUsers.length === 0 ? (
+            <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.emptyText, { color: colors.subtext }]}>No users match "{searchUsers}"</Text>
+            </View>
+          ) : (
+            filteredUsers.map(u => renderUserRow(u))
+          )
+        ) : (
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.discoverPillsRow}
+              style={styles.discoverPillsScroll}
+            >
+              {filterPills.map(p => {
+                const active = discoverFilter === p.key;
+                return (
+                  <TouchableOpacity
+                    key={p.key}
+                    onPress={() => { setDiscoverFilter(p.key); void Haptics.selectionAsync(); }}
+                    activeOpacity={0.8}
+                    style={[
+                      styles.discoverPill,
+                      {
+                        backgroundColor: active ? colors.accent : colors.card,
+                        borderColor: active ? colors.accent : colors.border,
+                      },
+                    ]}
+                  >
+                    {p.icon}
+                    <Text style={[styles.discoverPillText, { color: active ? '#fff' : colors.text }]}>{p.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+
+            {aggLoading ? (
+              <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <ActivityIndicator color={colors.accent} />
+                <Text style={[styles.emptyText, { color: colors.subtext, marginTop: 12 }]}>Finding people for you…</Text>
+              </View>
+            ) : aggError ? (
+              <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.emptyText, { color: colors.subtext }]}>
+                  Couldn't load recommendations. Pull down to refresh.
+                </Text>
+              </View>
+            ) : recommendations.length === 0 ? (
+              <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <Text style={[styles.emptyText, { color: colors.subtext }]}>
+                  {discoverFilter === 'new'
+                    ? 'No new joiners in the last 30 days.'
+                    : discoverFilter === 'collectors'
+                    ? 'No collectors to recommend yet.'
+                    : discoverFilter === 'popular'
+                    ? 'No popular users yet — be the first!'
+                    : 'You\'re following everyone we can recommend. Try the other filters.'}
+                </Text>
+              </View>
+            ) : (
+              recommendations.map(r => renderUserRow(r.user, r.reason))
+            )}
+          </>
+        )}
+      </>
+    );
+  };
 
   const renderFollowing = () => (
     <>
@@ -1195,6 +1434,28 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: '#E74C3C',
   },
+  discoverPillsScroll: { marginBottom: 14, marginTop: 2 },
+  discoverPillsRow: { gap: 8, paddingRight: 4 },
+  discoverPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  discoverPillText: { fontSize: 13, fontWeight: '700' as const },
+  reasonChip: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    maxWidth: '100%',
+  },
+  reasonChipText: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.2 },
   discoverySection: { marginBottom: 18 },
   discoveryHeader: { fontSize: 14, fontWeight: '700' as const, paddingHorizontal: 20, marginBottom: 10, letterSpacing: 0.3 },
   discoveryRow: { paddingHorizontal: 20, gap: 10 },
