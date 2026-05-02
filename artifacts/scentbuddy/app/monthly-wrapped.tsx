@@ -29,6 +29,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/providers/AuthProvider';
 import { supabase } from '@/lib/supabase';
 import { CollectionItem, WearDiaryEntry, SCENT_FAMILIES } from '@/lib/types';
+import FeatureSpotlight from '@/components/FeatureSpotlight';
+import { CalendarHeart, ChartPieSlice, Drop } from 'phosphor-react-native';
 
 type ActionState = 'idle' | 'saving' | 'sharing';
 
@@ -308,9 +310,26 @@ export default function MonthlyWrappedScreen() {
     </View>
   );
 
+  const spotlight = (
+    <FeatureSpotlight
+      storageKey="monthly_wrapped"
+      icon={CalendarHeart}
+      iconColor="#E8A838"
+      gradientColors={['#1f1408', '#160e05', '#241808']}
+      title="Your fragrance month, wrapped"
+      subtitle="A Spotify-Wrapped-style recap of how you wore your collection — fresh on the 1st of every month."
+      bullets={[
+        { icon: Drop, text: 'Most-worn bottles, top houses, and your scent vibe.' },
+        { icon: ChartPieSlice, text: 'See your wear streak, new additions, and family palette.' },
+        { icon: ShareNetwork, text: 'Save the card or share it straight to socials.' },
+      ]}
+    />
+  );
+
   if (stats.totalWears === 0 && newAdditions.length === 0) {
     return (
       <View style={[styles.container, { backgroundColor: '#0d0b08' }]}>
+        {spotlight}
         <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
           <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
             <CaretLeft size={22} color="#f0ebe5" weight="bold" />
@@ -336,6 +355,7 @@ export default function MonthlyWrappedScreen() {
 
   return (
     <View style={styles.container}>
+      {spotlight}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.headerBtn}>
           <CaretLeft size={22} color="#f0ebe5" weight="bold" />

@@ -25,6 +25,8 @@ import {
   Check,
   X,
   ClipboardText,
+  Star,
+  Drop,
 } from 'phosphor-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -32,6 +34,7 @@ import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { supabase, forceHttps } from '@/lib/supabase';
 import { CollectionItem } from '@/lib/types';
+import FeatureSpotlight from '@/components/FeatureSpotlight';
 
 type BlindTestRow = {
   id: string;
@@ -216,6 +219,19 @@ export default function BlindTestScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <FeatureSpotlight
+        storageKey="blind_test"
+        icon={EyeSlash}
+        iconColor="#5B8DEF"
+        gradientColors={['#0a1428', '#06101f', '#0d1830']}
+        title="Blind taste tests"
+        subtitle="Pick a fragrance from your collection, hide its name, and let your followers rate it on notes alone."
+        bullets={[
+          { icon: Drop, text: 'Friends see only the notes — never the brand or bottle.' },
+          { icon: Star, text: 'They rate it 1–5 stars and guess the family.' },
+          { icon: ShareNetwork, text: 'You see the unbiased verdict the moment they submit.' },
+        ]}
+      />
       <LinearGradient
         colors={[colors.accent + '22', colors.background]}
         style={[styles.headerGradient, { paddingTop: insets.top + 8 }]}

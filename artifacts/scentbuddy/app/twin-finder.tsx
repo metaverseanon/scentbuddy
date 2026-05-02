@@ -10,7 +10,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { CaretLeft, Heart, Sparkle, Crown, Users } from 'phosphor-react-native';
+import { CaretLeft, Heart, Sparkle, Crown, Users, Drop, MagnifyingGlass } from 'phosphor-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -18,6 +18,7 @@ import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import { usePaywallPrompt } from '@/providers/PaywallPromptProvider';
 import { supabase } from '@/lib/supabase';
 import ProfileAvatar from '@/components/ProfileAvatar';
+import FeatureSpotlight from '@/components/FeatureSpotlight';
 
 const FREE_LIMIT = 3;
 const PRO_LIMIT = 100;
@@ -118,6 +119,19 @@ export default function TwinFinderScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <FeatureSpotlight
+        storageKey="twin_finder"
+        icon={Heart}
+        iconColor="#e87090"
+        gradientColors={['#1f0a18', '#180614', '#260a1c']}
+        title="Find your fragrance twins"
+        subtitle="We compare your collection with the rest of the community to surface people who share your taste."
+        bullets={[
+          { icon: Drop, text: 'Shared bottles count 3× — overlapping notes count 1×.' },
+          { icon: MagnifyingGlass, text: 'Tap any match to peek at their full collection.' },
+          { icon: Crown, text: 'Free shows your top 3 — Pro unlocks every match.' },
+        ]}
+      />
       <LinearGradient
         colors={[colors.accent + '22', colors.background]}
         style={[styles.headerGradient, { paddingTop: insets.top + 8 }]}
