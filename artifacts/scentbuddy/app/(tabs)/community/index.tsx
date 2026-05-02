@@ -12,6 +12,7 @@ import {
   RefreshControl,
   Linking,
   Animated,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -374,24 +375,26 @@ export default function CommunityScreen() {
 
   const postChallengeMutation = useMutation({
     mutationFn: async (item: CollectionItem) => {
-      if (!user?.id) throw new Error('Not logged in');
+      if (!user?.id) throw new Error('You need to be signed in to log a pick.');
       const today = new Date().toISOString().split('T')[0];
       const noteText = `${CHALLENGE_NOTE_PREFIX} ${todayChallenge.title}`;
-      console.log('Posting challenge pick:', item.perfume_name, 'note:', noteText, 'date:', today);
+      console.log('[challenge] posting pick:', item.perfume_name, 'date:', today);
 
-      const { data: existing, error: fetchError } = await supabase
+      const { data: existingList, error: fetchError } = await supabase
         .from('today_wears')
         .select('id')
         .eq('user_id', user.id)
         .eq('date', today)
-        .maybeSingle();
+        .limit(1);
       if (fetchError) {
-        console.log('Challenge fetch existing error:', fetchError);
+        console.log('[challenge] fetch existing error:', fetchError);
+        throw new Error(fetchError.message);
       }
+      const existingId = existingList && existingList.length > 0 ? existingList[0].id : null;
 
       let rowId: string | null = null;
-      if (existing?.id) {
-        console.log('Updating existing today_wear row:', existing.id);
+      if (existingId) {
+        console.log('[challenge] updating existing row:', existingId);
         const { error } = await supabase
           .from('today_wears')
           .update({
@@ -400,54 +403,78 @@ export default function CommunityScreen() {
             image_url: item.image_url,
             note: noteText,
           })
-          .eq('id', existing.id);
+          .eq('id', existingId);
         if (error) {
-          console.log('Challenge pick update error:', error);
+          console.log('[challenge] update error:', error);
           throw new Error(error.message);
         }
-        rowId = existing.id;
+        rowId = existingId;
       } else {
-        const { data, error } = await supabase.from('today_wears').insert({
+        const { data: insertedList, error } = await supabase.from('today_wears').insert({
           user_id: user.id,
           perfume_name: item.perfume_name,
           perfume_brand: item.perfume_brand,
           image_url: item.image_url,
           date: today,
           note: noteText,
-        }).select('id').single();
+        }).select('id');
         if (error) {
-          console.log('Challenge pick insert error:', error);
+          console.log('[challenge] insert error:', error);
           throw new Error(error.message);
         }
-        rowId = data?.id ?? null;
+        rowId = insertedList && insertedList.length > 0 ? insertedList[0].id : null;
       }
 
-      if (!rowId) throw new Error('Failed to save pick');
-
-      const { data: fullRow, error: fullErr } = await supabase
-        .from('today_wears')
-        .select('*, profiles(*)')
-        .eq('id', rowId)
-        .single();
-      if (fullErr || !fullRow) {
-        console.log('Challenge fetch full row error:', fullErr);
-        throw new Error(fullErr?.message ?? 'Failed to load pick');
+      // Try to fetch the full row with profile join, but don't block success
+      // on this — RLS quirks shouldn't prevent the user's pick from being saved.
+      let fullRow: TodayWear | null = null;
+      if (rowId) {
+        const { data: fullList, error: fullErr } = await supabase
+          .from('today_wears')
+          .select('*, profiles(*)')
+          .eq('id', rowId)
+          .limit(1);
+        if (fullErr) {
+          console.log('[challenge] read-back error (non-fatal):', fullErr);
+        } else if (fullList && fullList.length > 0) {
+          fullRow = fullList[0] as TodayWear;
+        }
       }
-      console.log('Challenge response saved:', fullRow);
+
+      // Build a fallback row if the read-back was blocked, so the UI still
+      // updates immediately.
+      if (!fullRow) {
+        fullRow = {
+          id: rowId ?? `temp-${Date.now()}`,
+          user_id: user.id,
+          perfume_name: item.perfume_name,
+          perfume_brand: item.perfume_brand,
+          image_url: item.image_url ?? null,
+          date: today,
+          note: noteText,
+          created_at: new Date().toISOString(),
+          profiles: profile ?? null,
+        } as unknown as TodayWear;
+      }
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      return fullRow as TodayWear;
+      return fullRow;
     },
     onSuccess: (newRow) => {
-      console.log('Challenge mutation onSuccess - merging row into cache');
+      console.log('[challenge] success — merging row into cache');
       queryClient.setQueryData<TodayWear[]>(['today-wears'], (old) => {
-        const filtered = (old ?? []).filter(w => w.id !== newRow.id);
+        const filtered = (old ?? []).filter(w => w.id !== newRow.id && w.user_id !== newRow.user_id);
         return [newRow, ...filtered];
       });
       void queryClient.invalidateQueries({ queryKey: ['today-wears'] });
       setShowChallengePicker(false);
     },
-    onError: (error) => {
-      console.log('Challenge mutation error:', error.message);
+    onError: (error: Error) => {
+      console.log('[challenge] mutation error:', error.message);
+      Alert.alert(
+        "Couldn't save your pick",
+        error.message || 'Something went wrong. Please try again.',
+        [{ text: 'OK' }]
+      );
     },
   });
 
