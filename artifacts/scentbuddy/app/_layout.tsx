@@ -92,6 +92,9 @@ function RootLayoutNav() {
         <Stack.Screen name="goals" options={{ headerShown: false, presentation: "card" }} />
         <Stack.Screen name="referrals" options={{ headerShown: false, presentation: "card" }} />
         <Stack.Screen name="paywall" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+        <Stack.Screen name="twin-finder" options={{ headerShown: false, presentation: "card" }} />
+        <Stack.Screen name="blind-test" options={{ headerShown: false, presentation: "card" }} />
+        <Stack.Screen name="monthly-wrapped" options={{ headerShown: false, presentation: "card" }} />
       </Stack>
       {!showSplash && <WhatsNewModal />}
       {showSplash && <AnimatedSplash onFinish={handleSplashFinish} />}
