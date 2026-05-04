@@ -194,7 +194,7 @@ function AddWishlistModal({ visible, onClose, userId }: {
   const handleSearch = useCallback((text: string) => {
     setSearchText(text);
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    if (text.trim().length < 2) {
+    if (text.trim().length < 3) {
       setSearchResults([]);
       return;
     }
