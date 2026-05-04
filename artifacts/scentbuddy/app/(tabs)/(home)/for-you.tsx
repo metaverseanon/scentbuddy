@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CaretLeft, Sparkle, Heart, CaretDown, CaretUp, X, Star } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useRevenueCat } from '@/providers/RevenueCatProvider';
@@ -22,6 +23,18 @@ import { supabase, searchFragrances, forceHttps } from '@/lib/supabase';
 import { LinearGradient } from 'expo-linear-gradient';
 import { CollectionItem, SearchResult } from '@/lib/types';
 import { Crown } from 'phosphor-react-native';
+import { ONBOARDING_QUIZ_KEY, QuizResults } from '@/constants/quiz';
+
+const FAMILY_NOTE_MAP: Record<string, string[]> = {
+  'Fresh & Citrus': ['Bergamot', 'Lemon', 'Grapefruit', 'Orange', 'Mandarin', 'Lime', 'Citrus'],
+  'Floral': ['Rose', 'Jasmine', 'Iris', 'Lily', 'Peony', 'Tuberose', 'Magnolia', 'Violet'],
+  'Woody & Earthy': ['Cedar', 'Sandalwood', 'Vetiver', 'Patchouli', 'Oakmoss', 'Birch'],
+  'Warm & Oriental': ['Amber', 'Vanilla', 'Benzoin', 'Incense', 'Tonka Bean', 'Labdanum'],
+  'Spicy': ['Cardamom', 'Pepper', 'Cinnamon', 'Saffron', 'Nutmeg', 'Clove', 'Ginger'],
+  'Gourmand': ['Vanilla', 'Caramel', 'Chocolate', 'Coffee', 'Praline', 'Honey', 'Coconut'],
+  'Oud & Leather': ['Oud', 'Leather', 'Smoke', 'Tobacco', 'Birch Tar', 'Castoreum'],
+  'Aquatic & Green': ['Marine', 'Sea Salt', 'Green Tea', 'Bamboo', 'Fig Leaf', 'Grass'],
+};
 
 const BRAND_TIERS: Record<string, number> = {
   'Dior': 1.3, 'Chanel': 1.3, 'Tom Ford': 1.3, 'YSL': 1.3, 'Guerlain': 1.3,
@@ -73,6 +86,18 @@ export default function ForYouScreen() {
   const [altLoading, setAltLoading] = useState(false);
   const [altExpandedIndex, setAltExpandedIndex] = useState<number | null>(null);
 
+  const quizQuery = useQuery({
+    queryKey: ['quiz-results'],
+    queryFn: async () => {
+      try {
+        const raw = await AsyncStorage.getItem(ONBOARDING_QUIZ_KEY);
+        if (!raw) return null;
+        return JSON.parse(raw) as QuizResults;
+      } catch { return null; }
+    },
+    staleTime: Infinity,
+  });
+  const quizResults = quizQuery.data ?? null;
 
   const collectionQuery = useQuery({
     queryKey: ['collection', user?.id],
@@ -106,33 +131,66 @@ export default function ForYouScreen() {
 
   const collection = useMemo(() => collectionQuery.data ?? [], [collectionQuery.data]);
 
+  const brandAffinity = useMemo(() => {
+    const counts: Record<string, number> = {};
+    collection.forEach(item => {
+      const b = (item.perfume_brand ?? '').trim();
+      if (b) counts[b] = (counts[b] || 0) + 1;
+    });
+    return counts;
+  }, [collection]);
+
   const tasteProfile = useMemo(() => {
     const notes: Record<string, number> = {};
     collection.forEach(item => {
       const weight = !item.rating ? 0.6 :
-        item.rating === 1 ? -1.0 : item.rating === 2 ? -0.5 :
-        item.rating === 3 ? 0.5 : item.rating === 4 ? 0.67 : 1.0;
+        item.rating === 1 ? -1.0 : item.rating === 2 ? -0.3 :
+        item.rating === 3 ? 0.3 : item.rating === 4 ? 0.7 : 1.0;
 
       (item.top_notes ?? []).forEach(n => { notes[n] = (notes[n] || 0) + weight * 1; });
       (item.heart_notes ?? []).forEach(n => { notes[n] = (notes[n] || 0) + weight * 2; });
       (item.base_notes ?? []).forEach(n => { notes[n] = (notes[n] || 0) + weight * 3; });
     });
 
+    if (quizResults) {
+      (quizResults.favoriteNotes ?? []).forEach(n => {
+        notes[n] = (notes[n] || 0) + 4;
+      });
+    }
+
     const positiveNotes = Object.entries(notes)
       .filter(([, v]) => v > 0)
       .sort(([, a], [, b]) => b - a);
 
-    return positiveNotes.slice(0, 8);
-  }, [collection]);
+    return positiveNotes.slice(0, 12);
+  }, [collection, quizResults]);
+
+  const quizFamilies = useMemo(() => {
+    if (!quizResults?.scentFamilies) return [];
+    return quizResults.scentFamilies;
+  }, [quizResults]);
 
   const topSearchNotes = useMemo(() => {
-    return tasteProfile.slice(0, 4).map(([note]) => note);
-  }, [tasteProfile]);
+    const fromCollection = tasteProfile.slice(0, 4).map(([note]) => note);
+    const fromQuiz = (quizResults?.favoriteNotes ?? [])
+      .filter(n => !fromCollection.includes(n))
+      .slice(0, 2);
+    return [...fromCollection, ...fromQuiz];
+  }, [tasteProfile, quizResults]);
 
   const dailySeed = useMemo(() => getDailySeed(), []);
 
+  const quizNoteBoost = useMemo(() => {
+    const boost = new Set<string>();
+    quizFamilies.forEach(fam => {
+      (FAMILY_NOTE_MAP[fam] ?? []).forEach(n => boost.add(n));
+    });
+    (quizResults?.favoriteNotes ?? []).forEach(n => boost.add(n));
+    return boost;
+  }, [quizFamilies, quizResults]);
+
   const recommendationsQuery = useQuery({
-    queryKey: ['recommendations', user?.id, topSearchNotes.join(','), dailySeed],
+    queryKey: ['recommendations', user?.id, topSearchNotes.join(','), quizFamilies.join(','), dailySeed],
     queryFn: async () => {
       if (topSearchNotes.length === 0) return [];
       const allResults: SearchResult[] = [];
@@ -152,9 +210,14 @@ export default function ForYouScreen() {
         return true;
       });
 
+      const ownedNotes = new Set<string>();
+      collection.forEach(c => {
+        [...(c.top_notes ?? []), ...(c.heart_notes ?? []), ...(c.base_notes ?? [])].forEach(n => ownedNotes.add(n));
+      });
+
       const scored = deduped.map(r => {
         let score = 0;
-        const allNotes = [...(r.topNotes || []), ...(r.heartNotes || []), ...(r.baseNotes || [])];
+        const rAllNotes = [...(r.topNotes || []), ...(r.heartNotes || []), ...(r.baseNotes || [])];
         const matchedNotes: string[] = [];
 
         tasteProfile.forEach(([note, strength]) => {
@@ -163,21 +226,40 @@ export default function ForYouScreen() {
           if ((r.baseNotes || []).includes(note)) { score += strength * 4; matchedNotes.push(note); }
         });
 
+        rAllNotes.forEach(n => {
+          if (quizNoteBoost.has(n) && !matchedNotes.includes(n)) {
+            score += 2.5;
+            matchedNotes.push(n);
+          }
+        });
+
         const uniqueMatches = [...new Set(matchedNotes)];
-        if (uniqueMatches.length >= 3) score *= 1.4;
+        if (uniqueMatches.length >= 4) score *= 1.6;
+        else if (uniqueMatches.length >= 3) score *= 1.35;
         else if (uniqueMatches.length >= 2) score *= 1.15;
 
-        const brandMultiplier = Object.entries(BRAND_TIERS).find(([b]) =>
+        const tierEntry = Object.entries(BRAND_TIERS).find(([b]) =>
           r.brand.toLowerCase().includes(b.toLowerCase())
-        )?.[1] ?? 1.0;
-        score *= brandMultiplier;
+        );
+        const tierBoost = tierEntry?.[1] ?? 1.0;
 
-        const ownedNotes = new Set<string>();
-        collection.forEach(c => {
-          [...(c.top_notes ?? []), ...(c.heart_notes ?? []), ...(c.base_notes ?? [])].forEach(n => ownedNotes.add(n));
-        });
-        const overlap = allNotes.filter(n => ownedNotes.has(n)).length / Math.max(allNotes.length, 1);
-        if (overlap > 0.8) score *= 0.15;
+        const affinityCount = brandAffinity[r.brand] ?? 0;
+        const affinityBoost = affinityCount >= 3 ? 1.25 : affinityCount >= 1 ? 1.1 : 1.0;
+
+        score *= Math.max(tierBoost, affinityBoost);
+
+        if (r.rating) {
+          const ratingNum = parseFloat(r.rating);
+          if (!isNaN(ratingNum)) {
+            if (ratingNum >= 4.0) score *= 1.15;
+            else if (ratingNum >= 3.5) score *= 1.05;
+            else if (ratingNum < 2.5) score *= 0.7;
+          }
+        }
+
+        const overlap = rAllNotes.filter(n => ownedNotes.has(n)).length / Math.max(rAllNotes.length, 1);
+        if (overlap > 0.9) score *= 0.3;
+        else if (overlap > 0.7) score *= 0.6;
 
         return { ...r, score, matchPct: 0, sharedNotes: [...new Set(matchedNotes)] };
       });
@@ -192,15 +274,15 @@ export default function ForYouScreen() {
 
       const shuffled = seededShuffle(limited, dailySeed);
 
-      const maxResults = (isPro || profile?.is_pro) ? 12 : 5;
+      const maxResults = (isPro || profile?.is_pro) ? 15 : 5;
       const finalResults = shuffled.slice(0, maxResults);
 
-      const topScore = finalResults.length > 0 ? finalResults[0].score : 1;
-      const bottomScore = finalResults.length > 1 ? finalResults[finalResults.length - 1].score : 0;
+      const topScore = finalResults.length > 0 ? Math.max(...finalResults.map(r => r.score)) : 1;
+      const bottomScore = finalResults.length > 1 ? Math.min(...finalResults.map(r => r.score)) : 0;
       const scoreRange = Math.max(topScore - bottomScore, 0.01);
       return finalResults.map((r, idx) => {
         const relativePosition = (r.score - bottomScore) / scoreRange;
-        const pct = Math.min(96, Math.max(45, Math.round(relativePosition * 40 + 56 - idx * 3)));
+        const pct = Math.min(97, Math.max(50, Math.round(relativePosition * 35 + 60 - idx * 1.5)));
         return { ...r, matchPct: pct };
       });
     },
@@ -969,13 +1051,19 @@ export default function ForYouScreen() {
       </ScrollView>
 
       <Modal visible={showQuiz} animationType="slide" presentationStyle="pageSheet">
-        <QuizModal onClose={() => setShowQuiz(false)} />
+        <QuizModal
+          onClose={() => setShowQuiz(false)}
+          onSave={() => {
+            void queryClient.invalidateQueries({ queryKey: ['quiz-results'] });
+            void queryClient.invalidateQueries({ queryKey: ['recommendations'] });
+          }}
+        />
       </Modal>
     </View>
   );
 }
 
-function QuizModal({ onClose }: { onClose: () => void }) {
+function QuizModal({ onClose, onSave }: { onClose: () => void; onSave: (results: QuizResults) => void }) {
   const { colors } = useTheme();
   const [step, setStep] = useState(0);
   const [selections, setSelections] = useState<string[][]>([[], [], [], []]);
@@ -1092,6 +1180,15 @@ function QuizModal({ onClose }: { onClose: () => void }) {
               setStep(step + 1);
             } else {
               void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              const results: QuizResults = {
+                scentFamilies: selections[0],
+                favoriteNotes: selections[1],
+                occasions: selections[2],
+                priorities: selections[3],
+                completedAt: new Date().toISOString(),
+              };
+              void AsyncStorage.setItem(ONBOARDING_QUIZ_KEY, JSON.stringify(results));
+              onSave(results);
               onClose();
             }
           }}

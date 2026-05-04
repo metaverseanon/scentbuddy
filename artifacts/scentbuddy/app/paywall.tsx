@@ -20,6 +20,7 @@ import { useTheme } from '@/providers/ThemeProvider';
 
 const PRO_FEATURES = [
   { icon: '♾️', title: 'Unlimited Collection', desc: 'No limits on fragrances you can track' },
+  { icon: '✨', title: 'For You Picks', desc: 'Smart recommendations from 74K+ fragrances matched to your taste' },
   { icon: '🤖', title: 'AI Recommendations', desc: 'Personalized scent suggestions' },
   { icon: '📊', title: 'Full Analytics', desc: 'Deep insights into your wearing habits' },
   { icon: '🎯', title: 'Advanced Goals', desc: 'Set and track fragrance goals' },
