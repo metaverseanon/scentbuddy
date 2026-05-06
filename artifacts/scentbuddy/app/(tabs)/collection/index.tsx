@@ -128,30 +128,6 @@ function CollectionScreenInner() {
 
   const collection = useMemo(() => collectionQuery.data ?? [], [collectionQuery.data]);
 
-  const processingRef = useRef(false);
-  useEffect(() => {
-    if (!user?.id) return;
-    if (processingRef.current) return;
-    const unprocessed = collection.filter(item => item.image_url && !item.clean_image_url);
-    if (unprocessed.length === 0) return;
-    processingRef.current = true;
-    (async () => {
-      try {
-        for (const item of unprocessed) {
-          if (!item.image_url) continue;
-          try {
-            await processFragranceImage(user.id, item.id, item.image_url);
-          } catch (err) {
-            console.log('[COLLECTION] BG removal failed for', item.id, err);
-          }
-        }
-        void queryClient.invalidateQueries({ queryKey: ['collection', user.id] });
-      } finally {
-        processingRef.current = false;
-      }
-    })();
-  }, [collection, user?.id, queryClient]);
-
   const hasOpenedPerfumeId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -319,12 +295,14 @@ function CollectionScreenInner() {
         >
           <View style={styles.cardImageArea}>
             {imageUrl ? (
-              <Image
-                source={{ uri: imageUrl }}
-                style={styles.cardImage}
-                contentFit="contain"
-                transition={200}
-              />
+              <View style={styles.imageBackdrop}>
+                <Image
+                  source={{ uri: imageUrl }}
+                  style={styles.cardImage}
+                  contentFit="contain"
+                  transition={200}
+                />
+              </View>
             ) : (
               <View style={[styles.cardImagePlaceholder, { backgroundColor: colors.chip }]} />
             )}
@@ -1272,6 +1250,19 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingTop: 20,
     paddingBottom: 60,
+  },
+  imageBackdrop: {
+    width: 180,
+    height: 200,
+    borderRadius: 16,
+    backgroundColor: '#f5f0e8',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    elevation: 4,
   },
   cardImage: {
     width: 150,
