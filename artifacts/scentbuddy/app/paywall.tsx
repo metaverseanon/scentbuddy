@@ -319,7 +319,7 @@ export default function PaywallScreen() {
                       {formatPrice(pkg)}
                     </Text>
                     <Text style={[styles.packagePeriod, { color: colors.subtext }]}>
-                      {isAnnual ? 'per year · $2.99/mo' : `/${getPeriodLabel(pkg)}`}
+                      /{getPeriodLabel(pkg)}
                     </Text>
                   </View>
                 </TouchableOpacity>
