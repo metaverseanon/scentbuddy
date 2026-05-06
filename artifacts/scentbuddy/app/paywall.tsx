@@ -50,7 +50,7 @@ function isMonthlyPlan(pkg: PurchasesPackage | null): boolean {
 function formatPrice(pkg: PurchasesPackage): string {
   const product = pkg.product;
   if (product.priceString) return product.priceString;
-  return isAnnualPlan(pkg) ? '$35.95' : '$4.99';
+  return isAnnualPlan(pkg) ? '$35.95' : '$5.99';
 }
 
 function getPeriodLabel(pkg: PurchasesPackage): string {
