@@ -50,7 +50,7 @@ function isMonthlyPlan(pkg: PurchasesPackage | null): boolean {
 function formatPrice(pkg: PurchasesPackage): string {
   const product = pkg.product;
   if (product.priceString) return product.priceString;
-  return isAnnualPlan(pkg) ? '$41.94' : '$6.99';
+  return isAnnualPlan(pkg) ? '$35.95' : '$4.99';
 }
 
 function getPeriodLabel(pkg: PurchasesPackage): string {
@@ -312,14 +312,14 @@ export default function PaywallScreen() {
                   <View style={styles.packageRight}>
                     {isAnnual && (
                       <Text style={[styles.anchorPrice, { color: colors.subtext }]}>
-                        $83.88
+                        $71.90
                       </Text>
                     )}
                     <Text style={[styles.packagePrice, { color: colors.text }]}>
                       {formatPrice(pkg)}
                     </Text>
                     <Text style={[styles.packagePeriod, { color: colors.subtext }]}>
-                      {isAnnual ? 'per year · $3.49/mo' : `/${getPeriodLabel(pkg)}`}
+                      {isAnnual ? 'per year · $2.99/mo' : `/${getPeriodLabel(pkg)}`}
                     </Text>
                   </View>
                 </TouchableOpacity>
