@@ -128,6 +128,30 @@ function CollectionScreenInner() {
 
   const collection = useMemo(() => collectionQuery.data ?? [], [collectionQuery.data]);
 
+  const processingRef = useRef(false);
+  useEffect(() => {
+    if (!user?.id) return;
+    if (processingRef.current) return;
+    const unprocessed = collection.filter(item => item.image_url && !item.clean_image_url);
+    if (unprocessed.length === 0) return;
+    processingRef.current = true;
+    (async () => {
+      try {
+        for (const item of unprocessed) {
+          if (!item.image_url) continue;
+          try {
+            await processFragranceImage(user.id, item.id, item.image_url);
+          } catch (err) {
+            console.log('[COLLECTION] BG removal failed for', item.id, err);
+          }
+        }
+        void queryClient.invalidateQueries({ queryKey: ['collection', user.id] });
+      } finally {
+        processingRef.current = false;
+      }
+    })();
+  }, [collection, user?.id, queryClient]);
+
   const hasOpenedPerfumeId = useRef<string | null>(null);
 
   useEffect(() => {
@@ -285,7 +309,8 @@ function CollectionScreenInner() {
   const renderCollectionCard = useCallback(({ item }: { item: CollectionItem }) => {
     try {
       const fillLevel = typeof item.fill_level === 'number' ? item.fill_level : 100;
-      const imageUrl = item.image_url ? forceHttps(item.image_url) : null;
+      const rawImageUrl = item.clean_image_url ?? item.image_url ?? null;
+      const imageUrl = rawImageUrl ? forceHttps(rawImageUrl) : null;
       return (
         <TouchableOpacity
           style={[styles.collectionCard, { backgroundColor: colors.card, marginHorizontal: 20, marginBottom: 12 }]}
