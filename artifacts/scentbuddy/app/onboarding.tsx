@@ -112,7 +112,7 @@ const PAGES: OnboardingPage[] = [
   },
   {
     title: 'Unlock\nScentbuddy Pro',
-    subtitle: 'Unlimited goals, advanced stats, AI recommendations, and more. Go deeper into your fragrance journey.',
+    subtitle: 'Unlimited collection, AI-matched picks from 74K+ fragrances, advanced stats, and twin finder. Less than a coffee a month.',
     icon: Crown,
     iconColor: '#c49a6c',
     gradientColors: ['#1a1308', '#2a2010'],
@@ -295,6 +295,21 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
       }
       router.replace('/');
     }
+
+    try {
+      await AsyncStorage.setItem('paywall_last_shown_at', String(Date.now()));
+      await AsyncStorage.setItem('paywall_open_count', '0');
+    } catch (e) {
+      console.log('Failed to record paywall trigger:', e);
+    }
+
+    setTimeout(() => {
+      try {
+        router.push('/paywall');
+      } catch (e) {
+        console.log('Failed to push paywall after onboarding:', e);
+      }
+    }, 600);
   }, [quizSelections, router, onComplete]);
 
   const skipOnboarding = useCallback(async () => {

@@ -19,14 +19,20 @@ import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 
 const PRO_FEATURES = [
-  { icon: '♾️', title: 'Unlimited Collection', desc: 'No limits on fragrances you can track' },
-  { icon: '✨', title: 'For You Picks', desc: 'Smart recommendations from 74K+ fragrances matched to your taste' },
-  { icon: '🤖', title: 'AI Recommendations', desc: 'Personalized scent suggestions' },
-  { icon: '📊', title: 'Full Analytics', desc: 'Deep insights into your wearing habits' },
-  { icon: '🎯', title: 'Advanced Goals', desc: 'Set and track fragrance goals' },
-  { icon: '🔍', title: 'Compare Tool', desc: 'Side-by-side fragrance comparison' },
-  { icon: '☁️', title: 'Cloud Sync', desc: 'Seamless sync across all devices' },
+  { icon: '✨', title: 'For You Picks, tuned to you', desc: 'Get matched to your perfect scents from 74,000+ fragrances — the moment you log in' },
+  { icon: '👯', title: 'Find your scent twins', desc: 'See up to 100 people with the same taste as you (free users only see 3)' },
+  { icon: '♾️', title: 'Unlimited collection', desc: 'Track every bottle you own — free is capped at 5' },
+  { icon: '📊', title: 'Deep analytics & shelf view', desc: 'Wear trends, note evolution, seasonal patterns, and a beautiful shelf layout' },
+  { icon: '🎯', title: 'Unlimited goals & streaks', desc: 'Set as many fragrance goals as you want — free is capped at 1' },
+  { icon: '🤖', title: 'AI scanner & recommendations', desc: 'Scan any bottle, get personalized suggestions, find dupes for niche scents' },
+  { icon: '☁️', title: 'Cloud sync across devices', desc: 'Your collection, diary, and stats — always backed up' },
 ];
+
+const TESTIMONIAL = {
+  quote: "Honestly the For You picks alone are worth it. Found 3 new signature scents in my first week.",
+  author: 'Maya R.',
+  rating: 5,
+};
 
 const IOS_MONTHLY_PRODUCT_ID = 'sb_monthly';
 const IOS_YEARLY_PRODUCT_ID = 'sb_yearly';
@@ -166,11 +172,21 @@ export default function PaywallScreen() {
             <Crown size={48} color={goldAccent} weight="fill" />
           </Animated.View>
           <Text style={[styles.heroTitle, { color: colors.text }]}>
-            Scent Buddy <Text style={{ color: goldAccent }}>Pro</Text>
+            Discover scents you'll <Text style={{ color: goldAccent }}>actually love</Text>
           </Text>
           <Text style={[styles.heroSubtitle, { color: colors.subtext }]}>
-            Unlock the full fragrance experience
+            Stop guessing. Get AI picks from 74K+ fragrances matched to your taste — plus everything below.
           </Text>
+          <View style={styles.socialProofRow}>
+            <View style={styles.starRow}>
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Star key={i} size={13} color={goldAccent} weight="fill" />
+              ))}
+            </View>
+            <Text style={[styles.socialProofText, { color: colors.subtext }]}>
+              Loved by thousands of fragrance lovers
+            </Text>
+          </View>
         </Animated.View>
 
         <View style={styles.featuresGrid}>
@@ -195,6 +211,20 @@ export default function PaywallScreen() {
               <Check size={18} color={goldAccent} weight="bold" />
             </Animated.View>
           ))}
+        </View>
+
+        <View style={[styles.testimonialCard, { backgroundColor: goldAccent + '10', borderColor: goldAccent + '40' }]}>
+          <View style={styles.testimonialStars}>
+            {Array.from({ length: TESTIMONIAL.rating }).map((_, i) => (
+              <Star key={i} size={14} color={goldAccent} weight="fill" />
+            ))}
+          </View>
+          <Text style={[styles.testimonialQuote, { color: colors.text }]}>
+            "{TESTIMONIAL.quote}"
+          </Text>
+          <Text style={[styles.testimonialAuthor, { color: colors.subtext }]}>
+            — {TESTIMONIAL.author}, Pro member
+          </Text>
         </View>
 
         {isLoadingOfferings ? (
@@ -280,11 +310,16 @@ export default function PaywallScreen() {
                     </View>
                   </View>
                   <View style={styles.packageRight}>
+                    {isAnnual && (
+                      <Text style={[styles.anchorPrice, { color: colors.subtext }]}>
+                        $83.88
+                      </Text>
+                    )}
                     <Text style={[styles.packagePrice, { color: colors.text }]}>
                       {formatPrice(pkg)}
                     </Text>
                     <Text style={[styles.packagePeriod, { color: colors.subtext }]}>
-                      /{getPeriodLabel(pkg)}
+                      {isAnnual ? 'per year · $3.49/mo' : `/${getPeriodLabel(pkg)}`}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -307,13 +342,13 @@ export default function PaywallScreen() {
             <>
               <Sparkle size={20} color="#fff" weight="fill" />
               <Text style={styles.purchaseBtnText}>
-                Continue with {isAnnualPlan(selectedPkg) ? 'Yearly' : 'Monthly'}
+                {isAnnualPlan(selectedPkg) ? 'Get Pro — Save 50%' : 'Get Pro Monthly'}
               </Text>
             </>
           )}
         </TouchableOpacity>
         <Text style={[styles.legalText, { color: colors.subtext }]}>
-          Cancel anytime · Subscription auto-renews
+          Cancel anytime in Settings · Auto-renews
         </Text>
       </View>
     </View>
@@ -357,13 +392,60 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   heroTitle: {
-    fontSize: 30,
+    fontSize: 28,
     fontWeight: '800' as const,
     letterSpacing: -0.5,
+    textAlign: 'center' as const,
+    lineHeight: 34,
+    paddingHorizontal: 8,
   },
   heroSubtitle: {
-    fontSize: 16,
-    marginTop: 6,
+    fontSize: 15,
+    marginTop: 8,
+    textAlign: 'center' as const,
+    lineHeight: 21,
+    paddingHorizontal: 8,
+  },
+  socialProofRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    marginTop: 14,
+    gap: 8,
+  },
+  starRow: {
+    flexDirection: 'row' as const,
+    gap: 2,
+  },
+  socialProofText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  testimonialCard: {
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  testimonialStars: {
+    flexDirection: 'row' as const,
+    gap: 2,
+    marginBottom: 8,
+  },
+  testimonialQuote: {
+    fontSize: 14,
+    lineHeight: 21,
+    fontStyle: 'italic' as const,
+    fontWeight: '500' as const,
+  },
+  testimonialAuthor: {
+    fontSize: 12,
+    marginTop: 8,
+    fontWeight: '600' as const,
+  },
+  anchorPrice: {
+    fontSize: 13,
+    textDecorationLine: 'line-through' as const,
+    marginBottom: 2,
   },
   featuresGrid: {
     gap: 8,

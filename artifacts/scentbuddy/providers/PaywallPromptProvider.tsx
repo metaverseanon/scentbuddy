@@ -9,9 +9,9 @@ import { useAuth } from '@/providers/AuthProvider';
 const LAST_SHOWN_KEY = 'paywall_last_shown_at';
 const OPEN_COUNT_KEY = 'paywall_open_count';
 
-const MIN_INTERVAL_MS = 1000 * 60 * 60 * 24 * 2;
-const OPENS_BEFORE_FIRST_SHOW = 3;
-const OPENS_BETWEEN_SHOWS = 4;
+const MIN_INTERVAL_MS = 1000 * 60 * 60 * 12;
+const OPENS_BEFORE_FIRST_SHOW = 1;
+const OPENS_BETWEEN_SHOWS = 2;
 
 const BLOCKED_PATHS: string[] = [
   '/paywall',
