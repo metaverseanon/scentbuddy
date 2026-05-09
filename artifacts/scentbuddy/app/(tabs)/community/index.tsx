@@ -17,15 +17,16 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { Bell, MagnifyingGlass, X, TrendUp, ArrowSquareOut, Flame, Drop, Fire, ClipboardText, Binoculars, Users, Trophy, User, SprayBottle, Lightning, Check, ArrowRight, Heart, EyeSlash, CalendarHeart } from 'phosphor-react-native';
+import { Bell, MagnifyingGlass, X, TrendUp, ArrowSquareOut, Flame, Drop, Fire, ClipboardText, Binoculars, Users, Trophy, User, SprayBottle, Lightning, Check, ArrowRight, Heart, EyeSlash, CalendarHeart, Camera, Trash } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { z } from 'zod';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { supabase, forceHttps } from '@/lib/supabase';
 import { apiUrl } from '@/lib/api';
-import { TodayWear, ActivityFeedItem, Profile, Notification, CollectionItem, TrendingItem } from '@/lib/types';
+import { TodayWear, ActivityFeedItem, Profile, Notification, CollectionItem, TrendingItem, CommunityPost } from '@/lib/types';
 import ProfileAvatar from '@/components/ProfileAvatar';
 import ProBadge from '@/components/ProBadge';
 import { createFollowNotification, sendPushToUser } from '@/lib/notifications';
@@ -45,6 +46,8 @@ export default function CommunityScreen() {
   const [showWearPicker, setShowWearPicker] = useState(false);
   const [showChallengePicker, setShowChallengePicker] = useState(false);
   const [searchUsers, setSearchUsers] = useState('');
+  const [composeText, setComposeText] = useState('');
+  const [composeImageUri, setComposeImageUri] = useState<string | null>(null);
   const [discoverFilter, setDiscoverFilter] = useState<'suggested' | 'new' | 'collectors' | 'popular'>('suggested');
   const challengePulse = useRef(new Animated.Value(1)).current;
   const challengeGlow = useRef(new Animated.Value(0)).current;
@@ -114,6 +117,95 @@ export default function CommunityScreen() {
         .limit(50);
       if (error) throw error;
       return (data ?? []) as ActivityFeedItem[];
+    },
+  });
+
+  const postsQuery = useQuery({
+    queryKey: ['community-posts'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('community_posts')
+        .select('*, profiles(*)')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) {
+        console.log('[posts] fetch error:', error.message);
+        throw error;
+      }
+      return (data ?? []) as CommunityPost[];
+    },
+  });
+
+  const pickPostImage = useCallback(async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert('Permission needed', 'Please allow photo access to attach an image.');
+        return;
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setComposeImageUri(result.assets[0].uri);
+      }
+    } catch (err) {
+      console.log('[posts] pick image error:', err);
+    }
+  }, []);
+
+  const createPostMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) throw new Error('Please sign in to post.');
+      const text = composeText.trim();
+      if (!text) throw new Error('Write something first.');
+
+      let imageUrl: string | null = null;
+      if (composeImageUri) {
+        const response = await fetch(composeImageUri);
+        const blob = await response.blob();
+        const filePath = `${user.id}/${Date.now()}.jpg`;
+        const { error: upErr } = await supabase.storage
+          .from('post-images')
+          .upload(filePath, blob, { contentType: 'image/jpeg', upsert: false });
+        if (upErr) {
+          console.log('[posts] upload error:', upErr);
+          throw new Error('Image upload failed: ' + upErr.message);
+        }
+        const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(filePath);
+        imageUrl = urlData.publicUrl;
+      }
+
+      const { error } = await supabase.from('community_posts').insert({
+        user_id: user.id,
+        text,
+        image_url: imageUrl,
+      });
+      if (error) {
+        console.log('[posts] insert error:', error);
+        throw new Error(error.message);
+      }
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onSuccess: () => {
+      setComposeText('');
+      setComposeImageUri(null);
+      void queryClient.invalidateQueries({ queryKey: ['community-posts'] });
+    },
+    onError: (err: Error) => {
+      Alert.alert('Could not post', err.message);
+    },
+  });
+
+  const deletePostMutation = useMutation({
+    mutationFn: async (postId: string) => {
+      const { error } = await supabase.from('community_posts').delete().eq('id', postId);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['community-posts'] });
     },
   });
 
@@ -645,6 +737,7 @@ export default function CommunityScreen() {
   const onRefresh = useCallback(() => {
     void todayWearsQuery.refetch();
     void feedQuery.refetch();
+    void postsQuery.refetch();
     void usersQuery.refetch();
     void socialTrendsQuery.refetch();
     void trendsQuery.refetch();
@@ -841,16 +934,115 @@ export default function CommunityScreen() {
     </>
   );
 
-  const renderFeed = () => (
+  const renderFeed = () => {
+    const posts = postsQuery.data ?? [];
+    const activities = feedQuery.data ?? [];
+    const trimmedLen = composeText.trim().length;
+    const charsLeft = 1000 - trimmedLen;
+    const canPost = trimmedLen > 0 && !createPostMutation.isPending;
+
+    return (
     <>
-      {feedQuery.isLoading ? (
+      <View style={[styles.composeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+        <View style={styles.composeHeader}>
+          <ProfileAvatar avatarUrl={profile?.avatar_url} avatarEmoji={profile?.avatar_emoji} size={36} backgroundColor={colors.chip} />
+          <TextInput
+            style={[styles.composeInput, { color: colors.text }]}
+            placeholder="Share a thought, review, or scent moment..."
+            placeholderTextColor={colors.subtext}
+            value={composeText}
+            onChangeText={setComposeText}
+            multiline
+            maxLength={1000}
+          />
+        </View>
+        {composeImageUri && (
+          <View style={styles.composePreviewWrap}>
+            <Image source={{ uri: composeImageUri }} style={styles.composePreview} resizeMode="cover" />
+            <TouchableOpacity
+              style={styles.composePreviewRemove}
+              onPress={() => setComposeImageUri(null)}
+            >
+              <X size={16} color="#fff" weight="bold" />
+            </TouchableOpacity>
+          </View>
+        )}
+        <View style={styles.composeActions}>
+          <TouchableOpacity
+            style={[styles.composeImgBtn, { backgroundColor: colors.chip }]}
+            onPress={pickPostImage}
+            disabled={createPostMutation.isPending}
+          >
+            <Camera size={18} color={colors.accent} weight="fill" />
+            <Text style={[styles.composeImgBtnText, { color: colors.text }]}>
+              {composeImageUri ? 'Change photo' : 'Add photo'}
+            </Text>
+          </TouchableOpacity>
+          <View style={styles.composeRight}>
+            {trimmedLen > 0 && (
+              <Text style={[styles.composeCount, { color: charsLeft < 50 ? '#EF5350' : colors.subtext }]}>
+                {charsLeft}
+              </Text>
+            )}
+            <TouchableOpacity
+              style={[styles.composePostBtn, { backgroundColor: canPost ? colors.accent : colors.chip, opacity: canPost ? 1 : 0.6 }]}
+              onPress={() => createPostMutation.mutate()}
+              disabled={!canPost}
+            >
+              {createPostMutation.isPending ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.composePostBtnText}>Post</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+
+      {posts.map(post => (
+        <View key={`post-${post.id}`} style={[styles.feedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <ProfileAvatar avatarUrl={(post.profiles as any)?.avatar_url} avatarEmoji={(post.profiles as any)?.avatar_emoji} size={40} backgroundColor={colors.chip} />
+          <View style={styles.feedContent}>
+            <View style={styles.userNameRow}>
+              <Text style={[styles.feedText, { color: colors.text }]}>
+                <Text style={{ fontWeight: '700' as const }}>{(post.profiles as any)?.display_name || (post.profiles as any)?.username || 'User'}</Text>
+              </Text>
+              {(post.profiles as any)?.is_pro && <ProBadge size="xs" />}
+              {post.user_id === user?.id && (
+                <TouchableOpacity
+                  style={styles.postDeleteBtn}
+                  onPress={() => {
+                    Alert.alert('Delete post?', 'This cannot be undone.', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: () => deletePostMutation.mutate(post.id) },
+                    ]);
+                  }}
+                >
+                  <Trash size={14} color={colors.subtext} />
+                </TouchableOpacity>
+              )}
+            </View>
+            <Text style={[styles.postText, { color: colors.text }]}>{post.text}</Text>
+            {post.image_url && (
+              <Image
+                source={{ uri: forceHttps(post.image_url) ?? undefined }}
+                style={styles.postImage}
+                resizeMode="cover"
+              />
+            )}
+            <Text style={[styles.feedTime, { color: colors.subtext }]}>{formatTime(post.created_at)}</Text>
+          </View>
+        </View>
+      ))}
+
+      {feedQuery.isLoading && posts.length === 0 ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: 20 }} />
-      ) : (feedQuery.data ?? []).length === 0 ? (
+      ) : activities.length === 0 && posts.length === 0 ? (
         <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Text style={[styles.emptyText, { color: colors.subtext }]}>No activity yet</Text>
+          <Text style={[styles.emptyText, { color: colors.subtext }]}>Be the first to post something!</Text>
         </View>
       ) : (
-        (feedQuery.data ?? []).map(item => (
+        activities.map(item => (
           <View key={item.id} style={[styles.feedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <ProfileAvatar avatarUrl={(item.profiles as any)?.avatar_url} avatarEmoji={(item.profiles as any)?.avatar_emoji} size={40} backgroundColor={colors.chip} />
             <View style={styles.feedContent}>
@@ -878,7 +1070,8 @@ export default function CommunityScreen() {
         ))
       )}
     </>
-  );
+    );
+  };
 
   const renderDiscover = () => {
     const isSearching = searchUsers.trim().length > 0;
@@ -1769,6 +1962,101 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontSize: 20, fontWeight: '700' as const },
   modalContent: { padding: 20, paddingBottom: 40 },
+  composeCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    marginBottom: 12,
+  },
+  composeHeader: {
+    flexDirection: 'row' as const,
+    gap: 10,
+    alignItems: 'flex-start' as const,
+  },
+  composeInput: {
+    flex: 1,
+    fontSize: 15,
+    minHeight: 44,
+    maxHeight: 140,
+    paddingTop: 8,
+    paddingHorizontal: 0,
+  },
+  composePreviewWrap: {
+    marginTop: 10,
+    borderRadius: 12,
+    overflow: 'hidden' as const,
+    position: 'relative' as const,
+  },
+  composePreview: {
+    width: '100%' as const,
+    height: 200,
+  },
+  composePreviewRemove: {
+    position: 'absolute' as const,
+    top: 8,
+    right: 8,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  composeActions: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginTop: 12,
+  },
+  composeImgBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+  composeImgBtnText: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  composeRight: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+  },
+  composeCount: {
+    fontSize: 12,
+    fontVariant: ['tabular-nums'] as const,
+  },
+  composePostBtn: {
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 10,
+    minWidth: 70,
+    alignItems: 'center' as const,
+  },
+  composePostBtnText: {
+    color: '#fff',
+    fontWeight: '700' as const,
+    fontSize: 14,
+  },
+  postText: {
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  postImage: {
+    width: '100%' as const,
+    height: 220,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  postDeleteBtn: {
+    marginLeft: 'auto' as const,
+    padding: 4,
+  },
   wearPickerCard: {
     flexDirection: 'row',
     padding: 12,

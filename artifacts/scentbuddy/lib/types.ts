@@ -113,6 +113,15 @@ export interface ActivityFeedItem {
   profiles?: Profile;
 }
 
+export interface CommunityPost {
+  id: string;
+  user_id: string;
+  text: string;
+  image_url: string | null;
+  created_at: string;
+  profiles?: Profile;
+}
+
 export interface Notification {
   id: string;
   user_id: string;
