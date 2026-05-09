@@ -274,7 +274,7 @@ export default function ForYouScreen() {
 
       const shuffled = seededShuffle(limited, dailySeed);
 
-      const maxResults = (isPro || profile?.is_pro) ? 15 : 5;
+      const maxResults = isPro ? 15 : 5;
       const finalResults = shuffled.slice(0, maxResults);
 
       const topScore = finalResults.length > 0 ? Math.max(...finalResults.map(r => r.score)) : 1;
@@ -286,7 +286,7 @@ export default function ForYouScreen() {
         return { ...r, matchPct: pct };
       });
     },
-    enabled: topSearchNotes.length > 0 && !!(isPro || profile?.is_pro),
+    enabled: topSearchNotes.length > 0 && !!isPro,
     staleTime: 1000 * 60 * 60,
   });
 
@@ -602,7 +602,7 @@ export default function ForYouScreen() {
           </TouchableOpacity>
         </View>
 
-        {!(isPro || profile?.is_pro) ? (
+        {!isPro ? (
           <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border, alignItems: 'center', paddingVertical: 48 }]}>
             <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: colors.accent + '18', alignItems: 'center', justifyContent: 'center', marginBottom: 20, borderWidth: 2, borderColor: colors.accent + '40' }}>
               <Crown size={44} color={colors.accent} weight="duotone" />
