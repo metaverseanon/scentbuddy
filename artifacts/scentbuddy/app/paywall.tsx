@@ -12,8 +12,9 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
-import { X, Check, Crown, Sparkle, Star, ArrowCounterClockwise } from 'phosphor-react-native';
+import { X, Check, Crown, Sparkle, Star, ArrowCounterClockwise, Timer, ShieldCheck } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PurchasesPackage } from 'react-native-purchases';
 import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import { useTheme } from '@/providers/ThemeProvider';
@@ -28,11 +29,8 @@ const PRO_FEATURES = [
   { icon: '☁️', title: 'Cloud sync across devices', desc: 'Your collection, diary, and stats — always backed up' },
 ];
 
-const TESTIMONIAL = {
-  quote: "Honestly the For You picks alone are worth it. Found 3 new signature scents in my first week.",
-  author: 'Maya R.',
-  rating: 5,
-};
+const LAUNCH_OFFER_KEY = '@scentbuddy:launch_offer_started_at';
+const LAUNCH_OFFER_DURATION_MS = 48 * 60 * 60 * 1000;
 
 const IOS_MONTHLY_PRODUCT_ID = 'sb_monthly';
 const IOS_YEARLY_PRODUCT_ID = 'sb_yearly';
@@ -83,9 +81,49 @@ export default function PaywallScreen() {
   } = useRevenueCat();
 
   const [selectedPkg, setSelectedPkg] = useState<PurchasesPackage | null>(null);
+  const [launchOfferEndsAt, setLaunchOfferEndsAt] = useState<number | null>(null);
+  const [now, setNow] = useState<number>(Date.now());
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const crownScale = useRef(new Animated.Value(0.5)).current;
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const stored = await AsyncStorage.getItem(LAUNCH_OFFER_KEY);
+        let startedAt: number;
+        if (stored) {
+          startedAt = parseInt(stored, 10);
+          if (isNaN(startedAt)) {
+            startedAt = Date.now();
+            await AsyncStorage.setItem(LAUNCH_OFFER_KEY, String(startedAt));
+          }
+        } else {
+          startedAt = Date.now();
+          await AsyncStorage.setItem(LAUNCH_OFFER_KEY, String(startedAt));
+        }
+        setLaunchOfferEndsAt(startedAt + LAUNCH_OFFER_DURATION_MS);
+      } catch (err) {
+        console.log('[paywall] launch offer storage error:', err);
+        setLaunchOfferEndsAt(Date.now() + LAUNCH_OFFER_DURATION_MS);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (!launchOfferEndsAt) return;
+    if (now >= launchOfferEndsAt) return;
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [launchOfferEndsAt, now]);
+
+  const offerActive = launchOfferEndsAt !== null && now < launchOfferEndsAt;
+  const remainingMs = launchOfferEndsAt ? Math.max(0, launchOfferEndsAt - now) : 0;
+  const remHours = Math.floor(remainingMs / (60 * 60 * 1000));
+  const remMins = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
+  const remSecs = Math.floor((remainingMs % (60 * 1000)) / 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const countdownText = `${pad(remHours)}:${pad(remMins)}:${pad(remSecs)}`;
 
   useEffect(() => {
     Animated.parallel([
@@ -139,7 +177,33 @@ export default function PaywallScreen() {
     }
   }, [restorePurchases, isPro, rcConfigured]);
 
-  const savingsText = getSavingsText(packages);
+  const savingsText = offerActive ? getSavingsText(packages) : null;
+
+  const annualPkg = packages.find(isAnnualPlan);
+  const annualMonthlyEquiv: string | null = (() => {
+    if (!annualPkg) return null;
+    const product: any = annualPkg.product;
+    const priceNum: number | undefined = typeof product.price === 'number' ? product.price : undefined;
+    const currencyCode: string | undefined = product.currencyCode;
+    if (!priceNum || priceNum <= 0) return null;
+    const perMonth = priceNum / 12;
+    if (currencyCode) {
+      try {
+        return new Intl.NumberFormat(undefined, {
+          style: 'currency',
+          currency: currencyCode,
+          maximumFractionDigits: 2,
+        }).format(perMonth);
+      } catch {
+        // fall through
+      }
+    }
+    // Fallback: derive symbol from priceString (e.g. "$71.90" → "$", "€71,90" → "€")
+    const priceString: string = product.priceString ?? '';
+    const symbolMatch = priceString.match(/^[^\d\s\-.,]+/);
+    const symbol = symbolMatch ? symbolMatch[0] : '';
+    return `${symbol}${perMonth.toFixed(2)}`;
+  })();
 
   const isDark = colors.background === '#0d0b08';
   const gradientTop = isDark ? '#1a1510' : '#faf7f2';
@@ -178,16 +242,40 @@ export default function PaywallScreen() {
             Stop guessing. Get AI picks from 74K+ fragrances matched to your taste — plus everything below.
           </Text>
           <View style={styles.socialProofRow}>
-            <View style={styles.starRow}>
-              {[1, 2, 3, 4, 5].map((i) => (
-                <Star key={i} size={13} color={goldAccent} weight="fill" />
-              ))}
-            </View>
+            <Sparkle size={14} color={goldAccent} weight="fill" />
             <Text style={[styles.socialProofText, { color: colors.subtext }]}>
-              Loved by thousands of fragrance lovers
+              Built for fragrance enthusiasts
             </Text>
           </View>
         </Animated.View>
+
+        {offerActive && (
+          <View style={[styles.offerBanner, { backgroundColor: goldAccent + '15', borderColor: goldAccent }]}>
+            <View style={styles.offerBannerLeft}>
+              <Timer size={20} color={goldAccent} weight="fill" />
+              <View>
+                <Text style={[styles.offerBannerTitle, { color: colors.text }]}>Launch offer — 50% off yearly</Text>
+                <Text style={[styles.offerBannerSub, { color: colors.subtext }]}>Lock in this price before it expires</Text>
+              </View>
+            </View>
+            <View style={[styles.offerCountdown, { backgroundColor: goldAccent }]}>
+              <Text style={styles.offerCountdownText}>{countdownText}</Text>
+            </View>
+          </View>
+        )}
+
+        {annualMonthlyEquiv && (
+          <View style={[styles.priceHero, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <Text style={[styles.priceHeroLabel, { color: colors.subtext }]}>Yearly works out to</Text>
+            <View style={styles.priceHeroRow}>
+              <Text style={[styles.priceHeroBig, { color: colors.text }]}>{annualMonthlyEquiv}</Text>
+              <Text style={[styles.priceHeroPer, { color: colors.subtext }]}>/month</Text>
+            </View>
+            <Text style={[styles.priceHeroSub, { color: colors.subtext }]}>
+              Less than a fancy coffee · Cancel anytime
+            </Text>
+          </View>
+        )}
 
         <View style={styles.featuresGrid}>
           {PRO_FEATURES.map((feature, i) => (
@@ -213,18 +301,14 @@ export default function PaywallScreen() {
           ))}
         </View>
 
-        <View style={[styles.testimonialCard, { backgroundColor: goldAccent + '10', borderColor: goldAccent + '40' }]}>
-          <View style={styles.testimonialStars}>
-            {Array.from({ length: TESTIMONIAL.rating }).map((_, i) => (
-              <Star key={i} size={14} color={goldAccent} weight="fill" />
-            ))}
+        <View style={[styles.guaranteeCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+          <ShieldCheck size={22} color={goldAccent} weight="fill" />
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.guaranteeTitle, { color: colors.text }]}>Risk-free</Text>
+            <Text style={[styles.guaranteeSub, { color: colors.subtext }]}>
+              Cancel anytime in Settings · Refunds handled by the App Store
+            </Text>
           </View>
-          <Text style={[styles.testimonialQuote, { color: colors.text }]}>
-            "{TESTIMONIAL.quote}"
-          </Text>
-          <Text style={[styles.testimonialAuthor, { color: colors.subtext }]}>
-            — {TESTIMONIAL.author}, Pro member
-          </Text>
         </View>
 
         {isLoadingOfferings ? (
@@ -310,7 +394,7 @@ export default function PaywallScreen() {
                     </View>
                   </View>
                   <View style={styles.packageRight}>
-                    {isAnnual && (
+                    {isAnnual && offerActive && (
                       <Text style={[styles.anchorPrice, { color: colors.subtext }]}>
                         $71.90
                       </Text>
@@ -342,7 +426,9 @@ export default function PaywallScreen() {
             <>
               <Sparkle size={20} color="#fff" weight="fill" />
               <Text style={styles.purchaseBtnText}>
-                {isAnnualPlan(selectedPkg) ? 'Get Pro — Save 50%' : 'Get Pro Monthly'}
+                {isAnnualPlan(selectedPkg)
+                  ? (offerActive ? 'Claim 50% Off — Get Pro' : 'Get Pro Yearly')
+                  : 'Get Pro Monthly'}
               </Text>
             </>
           )}
@@ -420,27 +506,89 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600' as const,
   },
-  testimonialCard: {
-    padding: 16,
+  offerBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    marginBottom: 16,
+    gap: 12,
+  },
+  offerBannerLeft: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+    flex: 1,
+  },
+  offerBannerTitle: {
+    fontSize: 14,
+    fontWeight: '800' as const,
+  },
+  offerBannerSub: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  offerCountdown: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  offerCountdownText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '800' as const,
+    fontVariant: ['tabular-nums'] as const,
+    letterSpacing: 0.5,
+  },
+  priceHero: {
+    padding: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 20,
+    alignItems: 'center' as const,
+  },
+  priceHeroLabel: {
+    fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  priceHeroRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'baseline' as const,
+    marginTop: 4,
+  },
+  priceHeroBig: {
+    fontSize: 44,
+    fontWeight: '900' as const,
+    letterSpacing: -1,
+  },
+  priceHeroPer: {
+    fontSize: 18,
+    fontWeight: '600' as const,
+    marginLeft: 4,
+  },
+  priceHeroSub: {
+    fontSize: 13,
+    marginTop: 6,
+  },
+  guaranteeCard: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    padding: 14,
     borderRadius: 14,
     borderWidth: 1,
     marginBottom: 24,
   },
-  testimonialStars: {
-    flexDirection: 'row' as const,
-    gap: 2,
-    marginBottom: 8,
-  },
-  testimonialQuote: {
+  guaranteeTitle: {
     fontSize: 14,
-    lineHeight: 21,
-    fontStyle: 'italic' as const,
-    fontWeight: '500' as const,
+    fontWeight: '700' as const,
   },
-  testimonialAuthor: {
+  guaranteeSub: {
     fontSize: 12,
-    marginTop: 8,
-    fontWeight: '600' as const,
+    marginTop: 2,
+    lineHeight: 17,
   },
   anchorPrice: {
     fontSize: 13,

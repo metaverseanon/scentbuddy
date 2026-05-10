@@ -603,22 +603,80 @@ export default function ForYouScreen() {
         </View>
 
         {!isPro ? (
-          <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border, alignItems: 'center', paddingVertical: 48 }]}>
-            <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: colors.accent + '18', alignItems: 'center', justifyContent: 'center', marginBottom: 20, borderWidth: 2, borderColor: colors.accent + '40' }}>
-              <Crown size={44} color={colors.accent} weight="duotone" />
+          <>
+            <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <View style={styles.infoHeader}>
+                <Sparkle size={18} color={colors.accent} />
+                <Text style={[styles.infoTitle, { color: colors.text }]}>Smart Picks · Preview</Text>
+              </View>
+              <Text style={[styles.infoSub, { color: colors.subtext }]}>
+                Here&apos;s a taste of what Pro unlocks — 13 more matches waiting below.
+              </Text>
             </View>
-            <Text style={[styles.infoTitle, { color: colors.text, fontSize: 22, textAlign: 'center', marginBottom: 8 }]}>For You is a Pro Feature</Text>
-            <Text style={[styles.infoSub, { color: colors.subtext, textAlign: 'center', lineHeight: 20, paddingHorizontal: 12 }]}>
-              Get personalized recommendations from 74K+ fragrances matched to your taste profile, find budget-friendly alternatives, and discover similar scents.
-            </Text>
-            <TouchableOpacity
-              style={[styles.proGateBtn, { backgroundColor: colors.accent, marginTop: 20 }]}
-              onPress={() => router.push('/paywall')}
-            >
-              <Crown size={16} color="#fff" weight="fill" />
-              <Text style={styles.proGateBtnText}>Upgrade to Pro</Text>
-            </TouchableOpacity>
-          </View>
+
+            {[
+              { name: 'Layton', brand: 'Parfums de Marly', conc: 'EDP', match: 94, notes: ['Apple', 'Lavender', 'Vanilla', 'Cardamom'] },
+              { name: 'Oud Wood', brand: 'Tom Ford', conc: 'EDP', match: 91, notes: ['Oud', 'Rosewood', 'Sandalwood', 'Vanilla'] },
+            ].map((rec, i) => (
+              <View key={`preview-${i}`} style={[styles.recCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                <View style={[styles.recAccent, { backgroundColor: colors.accent }]} />
+                <View style={styles.recContent}>
+                  <View style={styles.recTop}>
+                    <View style={[styles.recImage, { backgroundColor: colors.chip, alignItems: 'center', justifyContent: 'center' }]}>
+                      <Sparkle size={28} color={colors.accent} weight="duotone" />
+                    </View>
+                    <View style={styles.recInfo}>
+                      <Text style={[styles.recName, { color: colors.text }]}>{rec.name}</Text>
+                      <Text style={[styles.recBrand, { color: colors.subtext }]}>{rec.brand}</Text>
+                      <Text style={[styles.recConc, { color: colors.subtext }]}>{rec.conc}</Text>
+                    </View>
+                    <View style={styles.recMatch}>
+                      <Text style={[styles.recMatchPct, { color: colors.accent }]}>{rec.match}%</Text>
+                      <Text style={[styles.recMatchLabel, { color: colors.subtext }]}>match</Text>
+                    </View>
+                  </View>
+                  <View style={styles.sharedNotesRow}>
+                    {rec.notes.map((note, j) => (
+                      <View key={j} style={[styles.sharedNoteChip, { backgroundColor: colors.chip, borderColor: colors.border }]}>
+                        <Text style={[styles.sharedNoteText, { color: colors.text }]}>{note}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              </View>
+            ))}
+
+            <View style={[styles.infoCard, {
+              backgroundColor: colors.card,
+              borderColor: colors.accent + '60',
+              borderWidth: 2,
+              alignItems: 'center',
+              paddingVertical: 28,
+              marginTop: 4,
+            }]}>
+              <View style={{
+                width: 64, height: 64, borderRadius: 32,
+                backgroundColor: colors.accent + '18',
+                alignItems: 'center', justifyContent: 'center',
+                marginBottom: 14,
+              }}>
+                <Crown size={32} color={colors.accent} weight="duotone" />
+              </View>
+              <Text style={[styles.infoTitle, { color: colors.text, fontSize: 19, textAlign: 'center', marginBottom: 6 }]}>
+                Unlock 13 more matches
+              </Text>
+              <Text style={[styles.infoSub, { color: colors.subtext, textAlign: 'center', lineHeight: 20, paddingHorizontal: 12, marginBottom: 16 }]}>
+                Personalized to your taste from 74K+ fragrances. Updated daily.
+              </Text>
+              <TouchableOpacity
+                style={[styles.proGateBtn, { backgroundColor: colors.accent, paddingHorizontal: 28 }]}
+                onPress={() => router.push('/paywall')}
+              >
+                <Crown size={16} color="#fff" weight="fill" />
+                <Text style={styles.proGateBtnText}>See My Matches</Text>
+              </TouchableOpacity>
+            </View>
+          </>
         ) : (
         <>
         <View style={[styles.infoCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
