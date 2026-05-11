@@ -28,6 +28,7 @@ import {
   Check,
   Crown,
   Lightning,
+  Trophy,
 } from 'phosphor-react-native';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -44,6 +45,15 @@ type FeaturePage = {
 };
 
 const PAGES: FeaturePage[] = [
+  {
+    icon: Trophy,
+    iconColor: '#FFD23F',
+    gradientColors: ['#1a1408', '#2d2310', '#1a1408'],
+    emoji: '🏆',
+    title: 'Biggest\nCollection',
+    subtitle:
+      'New leaderboard category is live — see who owns the most bottles in the community. Open Community to climb the ranks.',
+  },
   {
     icon: Binoculars,
     iconColor: '#5B8DEF',
