@@ -853,18 +853,23 @@ function NotifToggle({ label, subtitle, icon, enabled, onToggle, colors }: {
   );
 }
 
-async function uploadAvatarImage(userId: string, uri: string): Promise<string> {
+async function uploadAvatarImage(userId: string, base64: string): Promise<string> {
   console.log('Starting avatar upload for user:', userId);
 
-  const response = await fetch(uri);
-  const blob = await response.blob();
+  // React Native + Supabase Storage gotcha: passing a Blob obtained from
+  // `fetch(localUri).blob()` uploads as 0 bytes. We must decode the
+  // base64 string from expo-image-picker into a Uint8Array and upload that.
+  const binaryString = global.atob(base64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
 
-  const fileExt = 'jpg';
-  const filePath = `${userId}/avatar.${fileExt}`;
+  const filePath = `${userId}/avatar.jpg`;
 
   const { error: uploadError } = await supabase.storage
     .from('avatars')
-    .upload(filePath, blob, {
+    .upload(filePath, bytes, {
       contentType: 'image/jpeg',
       upsert: true,
     });
@@ -876,7 +881,7 @@ async function uploadAvatarImage(userId: string, uri: string): Promise<string> {
 
   const { data: urlData } = supabase.storage.from('avatars').getPublicUrl(filePath);
   const publicUrl = urlData.publicUrl + '?t=' + Date.now();
-  console.log('Avatar uploaded, public URL:', publicUrl);
+  console.log('Avatar uploaded, public URL:', publicUrl, 'size:', bytes.length);
   return publicUrl;
 }
 
@@ -896,6 +901,7 @@ function EditProfileModal({ visible, onClose, profile, updateProfile, userId }: 
   const [avatarEmoji, setAvatarEmoji] = useState(profile?.avatar_emoji || '🧴');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(profile?.avatar_url || null);
   const [localImageUri, setLocalImageUri] = useState<string | null>(null);
+  const [localImageBase64, setLocalImageBase64] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -925,11 +931,13 @@ function EditProfileModal({ visible, onClose, profile, updateProfile, userId }: 
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.7,
+        base64: true,
       });
 
       if (!result.canceled && result.assets[0]) {
-        console.log('Image picked:', result.assets[0].uri);
+        console.log('Image picked:', result.assets[0].uri, 'base64 len:', result.assets[0].base64?.length ?? 0);
         setLocalImageUri(result.assets[0].uri);
+        setLocalImageBase64(result.assets[0].base64 ?? null);
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } catch (err) {
@@ -951,11 +959,13 @@ function EditProfileModal({ visible, onClose, profile, updateProfile, userId }: 
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.7,
+        base64: true,
       });
 
       if (!result.canceled && result.assets[0]) {
-        console.log('Photo taken:', result.assets[0].uri);
+        console.log('Photo taken:', result.assets[0].uri, 'base64 len:', result.assets[0].base64?.length ?? 0);
         setLocalImageUri(result.assets[0].uri);
+        setLocalImageBase64(result.assets[0].base64 ?? null);
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       }
     } catch (err) {
@@ -974,7 +984,7 @@ function EditProfileModal({ visible, onClose, profile, updateProfile, userId }: 
       { text: 'Take Photo', onPress: () => void takePhoto() },
       { text: 'Choose from Library', onPress: () => void pickImage() },
       ...(avatarUrl || localImageUri
-        ? [{ text: 'Remove Photo', style: 'destructive' as const, onPress: () => { setLocalImageUri(null); setAvatarUrl(null); } }]
+        ? [{ text: 'Remove Photo', style: 'destructive' as const, onPress: () => { setLocalImageUri(null); setLocalImageBase64(null); setAvatarUrl(null); } }]
         : []),
       { text: 'Cancel', style: 'cancel' as const },
     ]);
@@ -986,14 +996,18 @@ function EditProfileModal({ visible, onClose, profile, updateProfile, userId }: 
       let finalAvatarUrl = avatarUrl;
 
       if (localImageUri) {
-        setUploading(true);
-        try {
-          finalAvatarUrl = await uploadAvatarImage(userId, localImageUri);
-        } catch (uploadErr: any) {
-          console.log('Avatar upload failed:', uploadErr);
-          Alert.alert('Upload failed', 'Profile saved without image. ' + (uploadErr?.message || ''));
+        if (!localImageBase64) {
+          Alert.alert('Upload failed', 'Image data missing. Please pick the photo again.');
+        } else {
+          setUploading(true);
+          try {
+            finalAvatarUrl = await uploadAvatarImage(userId, localImageBase64);
+          } catch (uploadErr: any) {
+            console.log('Avatar upload failed:', uploadErr);
+            Alert.alert('Upload failed', 'Profile saved without image. ' + (uploadErr?.message || ''));
+          }
+          setUploading(false);
         }
-        setUploading(false);
       }
 
       await updateProfile({
@@ -1050,6 +1064,7 @@ function EditProfileModal({ visible, onClose, profile, updateProfile, userId }: 
                 style={styles.removePhotoBtn}
                 onPress={() => {
                   setLocalImageUri(null);
+                  setLocalImageBase64(null);
                   setAvatarUrl(null);
                   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 }}
