@@ -19,13 +19,8 @@ import * as Haptics from 'expo-haptics';
 import {
   X,
   Sparkle,
-  Binoculars,
-  Heart,
-  EyeSlash,
-  CalendarHeart,
   ArrowRight,
   Check,
-  Crown,
   Lightning,
   Trophy,
 } from 'phosphor-react-native';
@@ -35,7 +30,7 @@ const WHATSNEW_KEY = 'scentbuddy_whatsnew_seen_version';
 const ONBOARDING_KEY = 'scentbuddy_onboarding_done';
 // Bump this constant any time PAGES changes — this is what triggers the modal,
 // independent of the app binary version (which is baked in at build time).
-const CONTENT_VERSION = 'biggest-collection-2026-05';
+const CONTENT_VERSION = 'biggest-collection-2026-05-v2';
 
 type FeaturePage = {
   icon: React.ElementType;
@@ -55,51 +50,6 @@ const PAGES: FeaturePage[] = [
     title: 'Biggest\nCollection',
     subtitle:
       'New leaderboard category is live — see who owns the most bottles in the community. Open Community to climb the ranks.',
-  },
-  {
-    icon: Binoculars,
-    iconColor: '#5B8DEF',
-    gradientColors: ['#0a1422', '#10203a', '#0a1422'],
-    emoji: '🧭',
-    title: 'Smarter\nDiscover',
-    subtitle:
-      'Find people who match your taste — filter by Suggested, New, Collectors and Popular, with reasons why each pick fits you.',
-  },
-  {
-    icon: Heart,
-    iconColor: '#e87090',
-    gradientColors: ['#1f0a18', '#2a0c20', '#1a0716'],
-    emoji: '💞',
-    title: 'Twin\nFinder',
-    subtitle:
-      'We compare your collection against the community and rank the people who share the most bottles and notes with you.',
-  },
-  {
-    icon: EyeSlash,
-    iconColor: '#8B5CF6',
-    gradientColors: ['#140f1a', '#1f1828', '#160e22'],
-    emoji: '🕵️',
-    title: 'Group\nBlind Test',
-    subtitle:
-      'Send a fragrance to friends without revealing the name or brand and see how it scores on its own merits.',
-  },
-  {
-    icon: CalendarHeart,
-    iconColor: '#E8A838',
-    gradientColors: ['#1a1308', '#2a2010', '#180f06'],
-    emoji: '✨',
-    title: 'Monthly\nWrapped',
-    subtitle:
-      'A beautiful Spotify-style recap of your fragrance month — top fragrance, family, mood and a heatmap. Save or share the card.',
-  },
-  {
-    icon: Crown,
-    iconColor: '#E8A838',
-    gradientColors: ['#1a1308', '#2a1f08', '#1a1308'],
-    emoji: '👑',
-    title: 'Pro\nBadges',
-    subtitle:
-      "Pro members now get a gold badge next to their name everywhere — Discover, Leaderboard, Wear feed, Community Picks and more.",
   },
 ];
 

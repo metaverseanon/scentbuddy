@@ -42,7 +42,7 @@ export default function CommunityScreen() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<CommunityTab>('leaderboard');
-  const [leaderboardCategory, setLeaderboardCategory] = useState<'sniffs' | 'collection'>('sniffs');
+  const [leaderboardCategory, setLeaderboardCategory] = useState<'sniffs' | 'collection'>('collection');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showWearPicker, setShowWearPicker] = useState(false);
   const [showChallengePicker, setShowChallengePicker] = useState(false);
