@@ -16,7 +16,6 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import Constants from 'expo-constants';
 import {
   X,
   Sparkle,
@@ -34,6 +33,9 @@ import {
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const WHATSNEW_KEY = 'scentbuddy_whatsnew_seen_version';
 const ONBOARDING_KEY = 'scentbuddy_onboarding_done';
+// Bump this constant any time PAGES changes — this is what triggers the modal,
+// independent of the app binary version (which is baked in at build time).
+const CONTENT_VERSION = 'biggest-collection-2026-05';
 
 type FeaturePage = {
   icon: React.ElementType;
@@ -115,7 +117,7 @@ export default function WhatsNewModal() {
   const slideAnims = useRef(PAGES.map(() => new Animated.Value(40))).current;
   const emojiScale = useRef(PAGES.map(() => new Animated.Value(0.3))).current;
   const emojiRotate = useRef(PAGES.map(() => new Animated.Value(-15))).current;
-  const currentVersion = Constants.expoConfig?.version ?? '0.0.0';
+  const currentVersion = CONTENT_VERSION;
 
   useEffect(() => {
     let cancelled = false;
@@ -256,7 +258,7 @@ export default function WhatsNewModal() {
         <View style={styles.header}>
           <View style={styles.headerBadge}>
             <Lightning size={11} color="#E8A838" weight="fill" />
-            <Text style={styles.headerBadgeText}>WHAT'S NEW · v{currentVersion}</Text>
+            <Text style={styles.headerBadgeText}>WHAT'S NEW</Text>
           </View>
           <TouchableOpacity
             style={styles.skipBtn}
