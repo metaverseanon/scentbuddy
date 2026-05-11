@@ -41,7 +41,8 @@ export default function CommunityScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<CommunityTab>('challenge');
+  const [activeTab, setActiveTab] = useState<CommunityTab>('leaderboard');
+  const [leaderboardCategory, setLeaderboardCategory] = useState<'sniffs' | 'collection'>('sniffs');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showWearPicker, setShowWearPicker] = useState(false);
   const [showChallengePicker, setShowChallengePicker] = useState(false);
@@ -393,7 +394,7 @@ export default function CommunityScreen() {
       if (error) throw error;
       return (data ?? []) as { user_id: string }[];
     },
-    enabled: activeTab === 'discover',
+    enabled: activeTab === 'discover' || activeTab === 'leaderboard',
     staleTime: 1000 * 60 * 5,
   });
 
@@ -1253,20 +1254,72 @@ export default function CommunityScreen() {
   );
 
   const renderLeaderboard = () => {
-    const entries = leaderboardQuery.data ?? [];
     const allUsers = usersQuery.data ?? [];
     const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
+
+    let entries: [string, number][] = [];
+    if (leaderboardCategory === 'sniffs') {
+      entries = leaderboardQuery.data ?? [];
+    } else {
+      const counts: Record<string, number> = {};
+      (allCollectionsAggQuery.data ?? []).forEach((row) => {
+        if (row.user_id) counts[row.user_id] = (counts[row.user_id] || 0) + 1;
+      });
+      entries = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 10);
+    }
+
+    const headerTitle = leaderboardCategory === 'sniffs' ? 'Sniff Leaderboard' : 'Biggest Collections';
+    const headerSub = leaderboardCategory === 'sniffs'
+      ? 'Who has the most admired collection?'
+      : 'Top collectors by number of bottles';
+    const scoreLabel = leaderboardCategory === 'sniffs' ? 'sniffs' : 'bottles';
+    const emptyText = leaderboardCategory === 'sniffs'
+      ? 'No sniffs yet — explore collections!'
+      : 'No collections yet — be the first!';
 
     return (
       <>
         <View style={[styles.leaderboardHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
           <Trophy size={36} color={colors.accent} weight="fill" />
-          <Text style={[styles.leaderboardTitle, { color: colors.text }]}>Sniff Leaderboard</Text>
-          <Text style={[styles.leaderboardSub, { color: colors.subtext }]}>Who has the most admired collection?</Text>
+          <Text style={[styles.leaderboardTitle, { color: colors.text }]}>{headerTitle}</Text>
+          <Text style={[styles.leaderboardSub, { color: colors.subtext }]}>{headerSub}</Text>
         </View>
+
+        <View style={styles.leaderCategoryRow}>
+          {([
+            { key: 'sniffs' as const, label: 'Most Admired' },
+            { key: 'collection' as const, label: 'Biggest Collection' },
+          ]).map((cat) => {
+            const isActive = leaderboardCategory === cat.key;
+            return (
+              <TouchableOpacity
+                key={cat.key}
+                style={[
+                  styles.leaderCategoryPill,
+                  {
+                    backgroundColor: isActive ? colors.accent : colors.card,
+                    borderColor: isActive ? colors.accent : colors.border,
+                  },
+                ]}
+                onPress={() => setLeaderboardCategory(cat.key)}
+                activeOpacity={0.8}
+              >
+                <Text
+                  style={[
+                    styles.leaderCategoryText,
+                    { color: isActive ? '#fff' : colors.text },
+                  ]}
+                >
+                  {cat.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
         {entries.length === 0 ? (
           <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-            <Text style={[styles.emptyText, { color: colors.subtext }]}>No sniffs yet — explore collections!</Text>
+            <Text style={[styles.emptyText, { color: colors.subtext }]}>{emptyText}</Text>
           </View>
         ) : (
           entries.map(([userId, count], i) => {
@@ -1301,7 +1354,7 @@ export default function CommunityScreen() {
                 </View>
                 <View style={styles.leaderScore}>
                   <Text style={[styles.leaderCount, { color: colors.accent }]}>{count}</Text>
-                  <Text style={[styles.leaderLabel, { color: colors.subtext }]}>sniffs</Text>
+                  <Text style={[styles.leaderLabel, { color: colors.subtext }]}>{scoreLabel}</Text>
                 </View>
               </TouchableOpacity>
             );
@@ -1828,6 +1881,23 @@ const styles = StyleSheet.create({
   userHandle: { fontSize: 13, marginTop: 2 },
   followBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, borderWidth: 1 },
   followBtnText: { fontSize: 13, fontWeight: '700' as const },
+  leaderCategoryRow: {
+    flexDirection: 'row' as const,
+    gap: 8,
+    marginBottom: 12,
+  },
+  leaderCategoryPill: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center' as const,
+  },
+  leaderCategoryText: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+  },
   leaderboardHeader: {
     borderRadius: 16,
     borderWidth: 1,
