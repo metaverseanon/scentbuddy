@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import { Profile } from '@/lib/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
-import { ONBOARDING_QUIZ_KEY, QuizResults } from '@/constants/quiz';
+import { ONBOARDING_QUIZ_KEY, QuizResults, STARTER_COLLECTION_KEY, StarterPick } from '@/constants/quiz';
 import { trackReferralSignUp, generateReferralCode } from '@/lib/referrals';
 import { AppsFlyerEvents } from '@/lib/appsflyer';
 import { TikTokEvents } from '@/lib/tiktok';
@@ -117,6 +117,47 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
           } catch (e) {
             console.log('Failed to clear quiz data:', e);
           }
+        }
+
+        try {
+          const starterRaw = await AsyncStorage.getItem(STARTER_COLLECTION_KEY);
+          if (starterRaw) {
+            const picks = JSON.parse(starterRaw) as StarterPick[];
+            if (Array.isArray(picks) && picks.length > 0) {
+              const rows = picks
+                .filter(p => p && p.name)
+                .map(p => ({
+                  user_id: data.user!.id,
+                  perfume_name: p.name,
+                  perfume_brand: p.brand ?? '',
+                  concentration: p.concentration ?? null,
+                  top_notes: p.topNotes ?? [],
+                  heart_notes: p.heartNotes ?? [],
+                  base_notes: p.baseNotes ?? [],
+                  image_url: p.imageUrl ?? null,
+                  is_favorite: false,
+                  date_added: new Date().toISOString(),
+                  status: 'owned',
+                  fill_level: 100,
+                }));
+              if (rows.length > 0) {
+                const { error: starterError } = await supabase.from('user_collections').insert(rows);
+                if (starterError) {
+                  // Preserve the key so picks can be retried once the session/RLS is ready.
+                  console.log('[Auth] Starter collection insert failed, keeping picks for retry:', starterError.message);
+                } else {
+                  console.log('[Auth] Synced starter collection:', rows.length);
+                  await AsyncStorage.removeItem(STARTER_COLLECTION_KEY);
+                }
+              } else {
+                await AsyncStorage.removeItem(STARTER_COLLECTION_KEY);
+              }
+            } else {
+              await AsyncStorage.removeItem(STARTER_COLLECTION_KEY);
+            }
+          }
+        } catch (e) {
+          console.log('Failed to sync starter collection:', e);
         }
 
         void AppsFlyerEvents.registration(data.user.id, email);

@@ -11,6 +11,8 @@ import {
   NativeSyntheticEvent,
   NativeScrollEvent,
   Platform,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -31,7 +33,25 @@ import {
   Gift,
   Crown,
 } from 'phosphor-react-native';
-import { QUIZ_STEPS, ONBOARDING_QUIZ_KEY, QuizResults } from '@/constants/quiz';
+import {
+  QUIZ_STEPS,
+  ONBOARDING_QUIZ_KEY,
+  QuizResults,
+  STARTER_COLLECTION_KEY,
+  StarterPick,
+} from '@/constants/quiz';
+import { computeArchetype, ScentArchetype } from '@/lib/scent-archetype';
+import { searchFragrances, forceHttps } from '@/lib/supabase';
+
+interface FragranceMatch {
+  name: string;
+  brand: string;
+  concentration?: string | null;
+  topNotes?: string[];
+  heartNotes?: string[];
+  baseNotes?: string[];
+  imageUrl?: string | null;
+}
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ONBOARDING_KEY = 'scentbuddy_onboarding_done';
@@ -132,11 +152,19 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const [currentPage, setCurrentPage] = useState(0);
-  const [phase, setPhase] = useState<'features' | 'quiz'>('features');
+  const [phase, setPhase] = useState<'features' | 'quiz' | 'result'>('features');
   const [quizStep, setQuizStep] = useState(0);
   const [quizSelections, setQuizSelections] = useState<string[][]>(
     QUIZ_STEPS.map(() => [])
   );
+  const [archetype, setArchetype] = useState<ScentArchetype | null>(null);
+  const [matches, setMatches] = useState<FragranceMatch[]>([]);
+  const [matchesLoading, setMatchesLoading] = useState(false);
+  const [ownedPicks, setOwnedPicks] = useState<Record<string, boolean>>({});
+  const [finishing, setFinishing] = useState(false);
+
+  const resultFade = useRef(new Animated.Value(0)).current;
+  const resultSlide = useRef(new Animated.Value(30)).current;
 
   const fadeAnims = useRef(PAGES.map(() => new Animated.Value(0))).current;
   const slideAnims = useRef(PAGES.map(() => new Animated.Value(40))).current;
@@ -234,6 +262,27 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     }
   }, [phase, quizStep, animateQuizStep]);
 
+  useEffect(() => {
+    if (phase === 'result') {
+      resultFade.setValue(0);
+      resultSlide.setValue(30);
+      Animated.parallel([
+        Animated.timing(resultFade, {
+          toValue: 1,
+          duration: 500,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+        Animated.timing(resultSlide, {
+          toValue: 0,
+          duration: 500,
+          easing: Easing.out(Easing.cubic),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [phase, resultFade, resultSlide]);
+
   const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const page = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
     if (page !== currentPage && page >= 0 && page < PAGES.length) {
@@ -265,7 +314,41 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     setQuizStep(0);
   }, []);
 
-  const saveQuizAndFinish = useCallback(async () => {
+  const fetchMatches = useCallback(async (seeds: string[]) => {
+    setMatchesLoading(true);
+    try {
+      const seen = new Set<string>();
+      const collected: FragranceMatch[] = [];
+      for (const seed of seeds.slice(0, 3)) {
+        if (collected.length >= 6) break;
+        const results = await searchFragrances(seed, 8);
+        for (const r of results) {
+          if (!r?.name) continue;
+          const key = `${r.name}|${r.brand}`.toLowerCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          collected.push({
+            name: r.name,
+            brand: r.brand ?? '',
+            concentration: r.concentration ?? null,
+            topNotes: r.topNotes ?? [],
+            heartNotes: r.heartNotes ?? [],
+            baseNotes: r.baseNotes ?? [],
+            imageUrl: forceHttps(r.imageUrl ?? null),
+          });
+          if (collected.length >= 6) break;
+        }
+      }
+      setMatches(collected);
+    } catch (e) {
+      console.log('Failed to fetch onboarding matches:', e);
+      setMatches([]);
+    } finally {
+      setMatchesLoading(false);
+    }
+  }, []);
+
+  const goToResult = useCallback(async () => {
     if (Platform.OS !== 'web') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
@@ -280,9 +363,51 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 
     try {
       await AsyncStorage.setItem(ONBOARDING_QUIZ_KEY, JSON.stringify(results));
-      console.log('Quiz results saved to AsyncStorage:', results);
     } catch (e) {
       console.log('Failed to save quiz results:', e);
+    }
+
+    const computed = computeArchetype(results);
+    setArchetype(computed);
+    setPhase('result');
+    void fetchMatches(computed.searchSeeds);
+  }, [quizSelections, fetchMatches]);
+
+  const toggleOwned = useCallback((match: FragranceMatch) => {
+    if (Platform.OS !== 'web') {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+    const key = `${match.name}|${match.brand}`;
+    setOwnedPicks(prev => ({ ...prev, [key]: !prev[key] }));
+  }, []);
+
+  const finishOnboarding = useCallback(async () => {
+    if (finishing) return;
+    setFinishing(true);
+    if (Platform.OS !== 'web') {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+
+    const picks: StarterPick[] = matches
+      .filter(m => ownedPicks[`${m.name}|${m.brand}`])
+      .map(m => ({
+        name: m.name,
+        brand: m.brand,
+        concentration: m.concentration ?? null,
+        topNotes: m.topNotes ?? [],
+        heartNotes: m.heartNotes ?? [],
+        baseNotes: m.baseNotes ?? [],
+        imageUrl: m.imageUrl ?? null,
+      }));
+
+    try {
+      if (picks.length > 0) {
+        await AsyncStorage.setItem(STARTER_COLLECTION_KEY, JSON.stringify(picks));
+      } else {
+        await AsyncStorage.removeItem(STARTER_COLLECTION_KEY);
+      }
+    } catch (e) {
+      console.log('Failed to save starter picks:', e);
     }
 
     if (onComplete) {
@@ -310,7 +435,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
         console.log('Failed to push paywall after onboarding:', e);
       }
     }, 600);
-  }, [quizSelections, router, onComplete]);
+  }, [finishing, matches, ownedPicks, router, onComplete]);
 
   const skipOnboarding = useCallback(async () => {
     if (onComplete) {
@@ -348,9 +473,9 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     if (quizStep < QUIZ_STEPS.length - 1) {
       setQuizStep(quizStep + 1);
     } else {
-      void saveQuizAndFinish();
+      void goToResult();
     }
-  }, [quizStep, saveQuizAndFinish]);
+  }, [quizStep, goToResult]);
 
   const quizBack = useCallback(() => {
     if (quizStep > 0) {
@@ -359,6 +484,113 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
       setPhase('features');
     }
   }, [quizStep]);
+
+  if (phase === 'result' && archetype) {
+    const ownedCount = matches.filter(m => ownedPicks[`${m.name}|${m.brand}`]).length;
+    return (
+      <View style={styles.container}>
+        <LinearGradient colors={QUIZ_GRADIENT} style={StyleSheet.absoluteFill} />
+        <ScrollView
+          contentContainerStyle={[
+            styles.resultScroll,
+            { paddingTop: insets.top + 28, paddingBottom: insets.bottom + 120 },
+          ]}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View style={{ opacity: resultFade, transform: [{ translateY: resultSlide }] }}>
+            <View style={styles.resultBadge}>
+              <Sparkle size={16} color={QUIZ_ACCENT} weight="fill" />
+              <Text style={styles.resultBadgeText}>YOUR SCENT PROFILE</Text>
+            </View>
+
+            <Text style={styles.resultArchetype}>{archetype.name}</Text>
+            <Text style={styles.resultTagline}>{archetype.tagline}</Text>
+
+            <View style={styles.resultCard}>
+              {archetype.families.map((fam) => (
+                <View key={fam.label} style={styles.familyRow}>
+                  <View style={styles.familyLabelRow}>
+                    <Text style={styles.familyLabel}>{fam.label}</Text>
+                    <Text style={styles.familyPct}>{fam.pct}%</Text>
+                  </View>
+                  <View style={styles.familyTrack}>
+                    <View
+                      style={[
+                        styles.familyFill,
+                        { width: `${fam.pct}%`, backgroundColor: fam.color },
+                      ]}
+                    />
+                  </View>
+                </View>
+              ))}
+            </View>
+
+            <Text style={styles.resultDescription}>{archetype.description}</Text>
+
+            <View style={styles.matchesHeaderRow}>
+              <Text style={styles.matchesTitle}>Scents in your DNA</Text>
+              <Text style={styles.matchesSub}>Tap the ones you already own</Text>
+            </View>
+
+            {matchesLoading ? (
+              <View style={styles.matchesLoading}>
+                <ActivityIndicator color={QUIZ_ACCENT} />
+                <Text style={styles.matchesLoadingText}>Matching your profile...</Text>
+              </View>
+            ) : matches.length === 0 ? (
+              <Text style={styles.matchesEmpty}>
+                We'll surface personalized matches once you're in. Continue to start your collection.
+              </Text>
+            ) : (
+              <View style={styles.matchesList}>
+                {matches.map((m) => {
+                  const key = `${m.name}|${m.brand}`;
+                  const owned = !!ownedPicks[key];
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[styles.matchRow, owned && styles.matchRowSelected]}
+                      onPress={() => toggleOwned(m)}
+                      activeOpacity={0.8}
+                    >
+                      {m.imageUrl ? (
+                        <Image source={{ uri: m.imageUrl }} style={styles.matchImage} />
+                      ) : (
+                        <View style={[styles.matchImage, styles.matchImagePlaceholder]}>
+                          <Drop size={20} color={QUIZ_ACCENT} />
+                        </View>
+                      )}
+                      <View style={styles.matchInfo}>
+                        <Text style={styles.matchName} numberOfLines={1}>{m.name}</Text>
+                        <Text style={styles.matchBrand} numberOfLines={1}>{m.brand}</Text>
+                      </View>
+                      <View style={[styles.matchCheckbox, owned && styles.matchCheckboxSelected]}>
+                        {owned ? <Check size={14} color="#fff" weight="bold" /> : null}
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+          </Animated.View>
+        </ScrollView>
+
+        <View style={[styles.resultFooter, { paddingBottom: insets.bottom + 24 }]}>
+          <TouchableOpacity
+            style={styles.resultContinueBtn}
+            onPress={finishOnboarding}
+            disabled={finishing}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.resultContinueText}>
+              {ownedCount > 0 ? `Add ${ownedCount} & Continue` : 'Continue'}
+            </Text>
+            <ArrowRight size={18} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   if (phase === 'quiz') {
     const currentQuizStep = QUIZ_STEPS[quizStep];
@@ -873,6 +1105,188 @@ const styles = StyleSheet.create({
     opacity: 0.4,
   },
   quizContinueText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700' as const,
+  },
+  resultScroll: {
+    paddingHorizontal: 24,
+  },
+  resultBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: QUIZ_ACCENT + '1A',
+    marginBottom: 14,
+  },
+  resultBadgeText: {
+    color: QUIZ_ACCENT,
+    fontSize: 12,
+    fontWeight: '700' as const,
+    letterSpacing: 1.5,
+  },
+  resultArchetype: {
+    color: '#fff',
+    fontSize: 34,
+    fontWeight: '800' as const,
+    letterSpacing: -1,
+    marginBottom: 6,
+  },
+  resultTagline: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 16,
+    marginBottom: 24,
+  },
+  resultCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 18,
+    gap: 14,
+  },
+  familyRow: {
+    gap: 8,
+  },
+  familyLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  familyLabel: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  familyPct: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    fontWeight: '700' as const,
+  },
+  familyTrack: {
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  familyFill: {
+    height: 8,
+    borderRadius: 4,
+  },
+  resultDescription: {
+    color: 'rgba(255,255,255,0.65)',
+    fontSize: 15,
+    lineHeight: 23,
+    marginTop: 20,
+  },
+  matchesHeaderRow: {
+    marginTop: 28,
+    marginBottom: 14,
+  },
+  matchesTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700' as const,
+  },
+  matchesSub: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 14,
+    marginTop: 2,
+  },
+  matchesLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 24,
+  },
+  matchesLoadingText: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 14,
+  },
+  matchesEmpty: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 14,
+    lineHeight: 21,
+    paddingVertical: 8,
+  },
+  matchesList: {
+    gap: 10,
+  },
+  matchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    padding: 10,
+    gap: 12,
+  },
+  matchRowSelected: {
+    borderColor: QUIZ_ACCENT,
+    backgroundColor: QUIZ_ACCENT + '12',
+  },
+  matchImage: {
+    width: 46,
+    height: 46,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  matchImagePlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  matchInfo: {
+    flex: 1,
+  },
+  matchName: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600' as const,
+  },
+  matchBrand: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 13,
+    marginTop: 2,
+  },
+  matchCheckbox: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  matchCheckboxSelected: {
+    backgroundColor: QUIZ_ACCENT,
+    borderColor: QUIZ_ACCENT,
+  },
+  resultFooter: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 24,
+    paddingTop: 12,
+    backgroundColor: 'rgba(20,16,12,0.92)',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  resultContinueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: QUIZ_ACCENT,
+    borderRadius: 16,
+    paddingVertical: 16,
+    gap: 8,
+  },
+  resultContinueText: {
     color: '#fff',
     fontSize: 17,
     fontWeight: '700' as const,

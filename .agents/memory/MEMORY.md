@@ -1,0 +1,1 @@
+- [ScentBuddy Pro & onboarding](scentbuddy-pro-and-onboarding.md) — Pro = RevenueCat entitlement only (not profiles.is_pro); onboarding renders pre-auth outside router Stack, use in-component phases + AsyncStorage sync at signUp.

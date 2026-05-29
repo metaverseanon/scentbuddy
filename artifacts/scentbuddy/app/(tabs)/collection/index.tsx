@@ -561,6 +561,7 @@ function AddPerfumeModal({ visible, onClose, userId, isPro, collectionCount }: {
 }) {
   const { colors } = useTheme();
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [searchText, setSearchText] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
@@ -648,7 +649,15 @@ function AddPerfumeModal({ visible, onClose, userId, isPro, collectionCount }: {
       onClose();
     },
     onError: (err: Error) => {
-      Alert.alert('Error', err.message);
+      if (err.message.includes('limited to')) {
+        onClose();
+        Alert.alert('Pro Feature', err.message, [
+          { text: 'Not Now', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => router.push('/paywall') },
+        ]);
+      } else {
+        Alert.alert('Error', err.message);
+      }
     },
   });
 

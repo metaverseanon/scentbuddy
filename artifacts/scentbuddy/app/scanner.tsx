@@ -18,6 +18,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { X, Flashlight, Scan, Check, Drop, Heart, Camera, ArrowCounterClockwise } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/providers/AuthProvider';
+import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { supabase, searchFragrances, forceHttps } from '@/lib/supabase';
 import { apiUrl } from '@/lib/api';
@@ -27,6 +28,7 @@ type ScanMode = 'barcode' | 'photo';
 
 export default function ScannerScreen() {
   const { user, profile } = useAuth();
+  const { isPro } = useRevenueCat();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -166,7 +168,6 @@ export default function ScannerScreen() {
   const addToCollection = useMutation({
     mutationFn: async (result: SearchResult) => {
       if (!user?.id) throw new Error('Not logged in');
-      const isPro = profile?.is_pro ?? false;
 
       if (!isPro) {
         const { count } = await supabase
@@ -209,6 +210,16 @@ export default function ScannerScreen() {
         return { ...prev, [key]: current === 'wishlist' ? 'both' : 'collection' };
       });
       void queryClient.invalidateQueries({ queryKey: ['collection', user?.id] });
+    },
+    onError: (err: Error) => {
+      if (err.message.includes('limited to')) {
+        Alert.alert('Pro Feature', err.message, [
+          { text: 'Not Now', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => router.push('/paywall') },
+        ]);
+      } else {
+        Alert.alert('Error', err.message);
+      }
     },
   });
 

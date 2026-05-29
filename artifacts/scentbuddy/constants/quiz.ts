@@ -1,4 +1,15 @@
 export const ONBOARDING_QUIZ_KEY = 'scentbuddy_onboarding_quiz';
+export const STARTER_COLLECTION_KEY = 'scentbuddy_starter_collection';
+
+export interface StarterPick {
+  name: string;
+  brand: string;
+  concentration?: string | null;
+  topNotes?: string[];
+  heartNotes?: string[];
+  baseNotes?: string[];
+  imageUrl?: string | null;
+}
 
 export interface QuizOption {
   emoji: string;
