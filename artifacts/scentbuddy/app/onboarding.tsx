@@ -430,7 +430,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 
     setTimeout(() => {
       try {
-        router.push('/paywall');
+        router.push({ pathname: '/paywall', params: { source: 'onboarding' } });
       } catch (e) {
         console.log('Failed to push paywall after onboarding:', e);
       }

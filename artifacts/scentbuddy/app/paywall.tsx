@@ -11,13 +11,16 @@ import {
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { X, Check, Crown, Sparkle, Star, ArrowCounterClockwise, Timer, ShieldCheck } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PurchasesPackage } from 'react-native-purchases';
 import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import { useTheme } from '@/providers/ThemeProvider';
+import { computeArchetype, ScentArchetype } from '@/lib/scent-archetype';
+import { ONBOARDING_QUIZ_KEY, QuizResults } from '@/constants/quiz';
+import { logAnalyticsEvent } from '@/lib/analytics';
 
 const PRO_FEATURES = [
   { icon: '✨', title: 'For You Picks, tuned to you', desc: 'Get matched to your perfect scents from 74,000+ fragrances — the moment you log in' },
@@ -67,6 +70,8 @@ export default function PaywallScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const params = useLocalSearchParams<{ source?: string }>();
+  const source = params.source ?? 'unknown';
   const {
     packages,
     isLoadingOfferings,
@@ -83,6 +88,13 @@ export default function PaywallScreen() {
   const [selectedPkg, setSelectedPkg] = useState<PurchasesPackage | null>(null);
   const [launchOfferEndsAt, setLaunchOfferEndsAt] = useState<number | null>(null);
   const [now, setNow] = useState<number>(Date.now());
+  const [archetype, setArchetype] = useState<ScentArchetype | null>(null);
+  const viewStartRef = useRef<number>(Date.now());
+  const dismissLoggedRef = useRef<boolean>(false);
+  const viewedLoggedRef = useRef<boolean>(false);
+  const convertedRef = useRef<boolean>(false);
+  const sourceRef = useRef<string>(source);
+  sourceRef.current = source;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const crownScale = useRef(new Animated.Value(0.5)).current;
@@ -134,6 +146,44 @@ export default function PaywallScreen() {
   }, [fadeAnim, slideAnim, crownScale]);
 
   useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(ONBOARDING_QUIZ_KEY);
+        if (raw) {
+          const results = JSON.parse(raw) as QuizResults;
+          setArchetype(computeArchetype(results));
+        }
+      } catch (err) {
+        console.log('[paywall] archetype load error:', err);
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (viewedLoggedRef.current) return;
+    viewedLoggedRef.current = true;
+    viewStartRef.current = Date.now();
+    void logAnalyticsEvent('paywall_viewed', { source });
+  }, [source]);
+
+  useEffect(() => {
+    if (isPro) convertedRef.current = true;
+  }, [isPro]);
+
+  useEffect(() => {
+    return () => {
+      if (!dismissLoggedRef.current && !convertedRef.current) {
+        dismissLoggedRef.current = true;
+        const secondsViewed = Math.round((Date.now() - viewStartRef.current) / 1000);
+        void logAnalyticsEvent('paywall_dismissed', {
+          source: sourceRef.current,
+          seconds_viewed: secondsViewed,
+        });
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (packages.length > 0 && !selectedPkg) {
       const annual = packages.find(isAnnualPlan);
       setSelectedPkg(annual ?? packages[0]);
@@ -148,17 +198,33 @@ export default function PaywallScreen() {
     }
   }, [isPro, router]);
 
+  const handleClose = useCallback(() => {
+    router.back();
+  }, [router]);
+
   const handlePurchase = useCallback(async () => {
     if (!selectedPkg) return;
+    const plan = isAnnualPlan(selectedPkg) ? 'yearly' : isMonthlyPlan(selectedPkg) ? 'monthly' : 'other';
+    void logAnalyticsEvent('paywall_purchase_tapped', {
+      source,
+      plan,
+      product_id: selectedPkg.product.identifier,
+    });
     try {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       await purchasePackage(selectedPkg);
+      convertedRef.current = true;
+      void logAnalyticsEvent('purchase_completed', {
+        source,
+        plan,
+        product_id: selectedPkg.product.identifier,
+      });
     } catch (error: any) {
       if (!error.userCancelled) {
         Alert.alert('Purchase Failed', error.message || 'Something went wrong. Please try again.');
       }
     }
-  }, [selectedPkg, purchasePackage]);
+  }, [selectedPkg, purchasePackage, source]);
 
   const handleRestore = useCallback(async () => {
     if (!rcConfigured) {
@@ -215,7 +281,7 @@ export default function PaywallScreen() {
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <TouchableOpacity
           style={[styles.closeBtn, { backgroundColor: colors.chip }]}
-          onPress={() => router.back()}
+          onPress={handleClose}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
           <X size={20} color={colors.text} weight="bold" />
@@ -235,12 +301,25 @@ export default function PaywallScreen() {
           <Animated.View style={[styles.crownContainer, { backgroundColor: goldAccent + '15', transform: [{ scale: crownScale }] }]}>
             <Crown size={48} color={goldAccent} weight="fill" />
           </Animated.View>
-          <Text style={[styles.heroTitle, { color: colors.text }]}>
-            Discover scents you'll <Text style={{ color: goldAccent }}>actually love</Text>
-          </Text>
-          <Text style={[styles.heroSubtitle, { color: colors.subtext }]}>
-            Stop guessing. Get AI picks from 74K+ fragrances matched to your taste — plus everything below.
-          </Text>
+          {archetype ? (
+            <>
+              <Text style={[styles.heroTitle, { color: colors.text }]}>
+                Unlock your full <Text style={{ color: goldAccent }}>{archetype.name}</Text> profile
+              </Text>
+              <Text style={[styles.heroSubtitle, { color: colors.subtext }]}>
+                {archetype.description} Go Pro to get matches, scent twins, and unlimited tracking built around your taste.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.heroTitle, { color: colors.text }]}>
+                Discover scents you'll <Text style={{ color: goldAccent }}>actually love</Text>
+              </Text>
+              <Text style={[styles.heroSubtitle, { color: colors.subtext }]}>
+                Stop guessing. Get AI picks from 74K+ fragrances matched to your taste — plus everything below.
+              </Text>
+            </>
+          )}
           <View style={styles.socialProofRow}>
             <Sparkle size={14} color={goldAccent} weight="fill" />
             <Text style={[styles.socialProofText, { color: colors.subtext }]}>
@@ -248,6 +327,28 @@ export default function PaywallScreen() {
             </Text>
           </View>
         </Animated.View>
+
+        {archetype && archetype.families.length > 0 && (
+          <Animated.View
+            style={[
+              styles.archetypeCard,
+              { backgroundColor: colors.card, borderColor: colors.border, opacity: fadeAnim },
+            ]}
+          >
+            <Text style={[styles.archetypeCardLabel, { color: colors.subtext }]}>YOUR SCENT DNA</Text>
+            {archetype.families.map((fam) => (
+              <View key={fam.label} style={styles.archetypeFamilyRow}>
+                <View style={styles.archetypeFamilyLabelRow}>
+                  <Text style={[styles.archetypeFamilyLabel, { color: colors.text }]}>{fam.label}</Text>
+                  <Text style={[styles.archetypeFamilyPct, { color: colors.subtext }]}>{fam.pct}%</Text>
+                </View>
+                <View style={[styles.archetypeTrack, { backgroundColor: colors.border }]}>
+                  <View style={[styles.archetypeFill, { width: `${fam.pct}%`, backgroundColor: fam.color }]} />
+                </View>
+              </View>
+            ))}
+          </Animated.View>
+        )}
 
         {offerActive && (
           <View style={[styles.offerBanner, { backgroundColor: goldAccent + '15', borderColor: goldAccent }]}>
@@ -505,6 +606,43 @@ const styles = StyleSheet.create({
   socialProofText: {
     fontSize: 13,
     fontWeight: '600' as const,
+  },
+  archetypeCard: {
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 20,
+    gap: 12,
+  },
+  archetypeCardLabel: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    letterSpacing: 1.5,
+  },
+  archetypeFamilyRow: {
+    gap: 6,
+  },
+  archetypeFamilyLabelRow: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+  },
+  archetypeFamilyLabel: {
+    fontSize: 14,
+    fontWeight: '600' as const,
+  },
+  archetypeFamilyPct: {
+    fontSize: 13,
+    fontWeight: '700' as const,
+  },
+  archetypeTrack: {
+    height: 8,
+    borderRadius: 4,
+    overflow: 'hidden' as const,
+  },
+  archetypeFill: {
+    height: 8,
+    borderRadius: 4,
   },
   offerBanner: {
     flexDirection: 'row' as const,

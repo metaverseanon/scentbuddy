@@ -365,6 +365,33 @@ export default function HomeScreen() {
 
         <Animated.View style={{ minHeight: 400, opacity: contentOpacity, transform: [{ translateY: contentSlide }] }}>
 
+        <TouchableOpacity
+          style={[styles.streakBanner, { backgroundColor: colors.card, borderColor: hasWornToday ? '#4CAF5055' : '#E8A83855' }]}
+          activeOpacity={0.85}
+          onPress={() => router.push('/diary')}
+        >
+          <View style={[styles.streakBannerIcon, { backgroundColor: stats.streak > 0 ? '#E8A83822' : colors.chip }]}>
+            <Flame size={24} color={stats.streak > 0 ? '#E8A838' : colors.subtext} weight="fill" />
+          </View>
+          <View style={styles.streakBannerText}>
+            <Text style={[styles.streakBannerTitle, { color: colors.text }]}>
+              {stats.streak > 0 ? `${stats.streak}-day logging streak` : 'Start your logging streak'}
+            </Text>
+            <Text style={[styles.streakBannerSub, { color: colors.subtext }]} numberOfLines={1}>
+              {hasWornToday
+                ? "Logged today — your streak is safe"
+                : stats.streak > 0
+                  ? 'Log what you\u2019re wearing to keep it alive'
+                  : 'Log what you\u2019re wearing today to begin'}
+            </Text>
+          </View>
+          {!hasWornToday && (
+            <View style={[styles.streakBannerCta, { backgroundColor: colors.accent }]}>
+              <Text style={styles.streakBannerCtaText}>Log</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+
         {activeArticle && (
           <View style={styles.newsSection}>
             <TouchableOpacity
@@ -822,6 +849,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   heroImage: { width: '100%', height: '100%', borderRadius: 12 },
+  streakBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+  },
+  streakBannerIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streakBannerText: { flex: 1 },
+  streakBannerTitle: { fontSize: 15, fontWeight: '700' as const },
+  streakBannerSub: { fontSize: 12, marginTop: 2 },
+  streakBannerCta: {
+    borderRadius: 100,
+    paddingHorizontal: 18,
+    paddingVertical: 8,
+  },
+  streakBannerCtaText: { color: '#fff', fontSize: 13, fontWeight: '700' as const },
   statsRow: {
     flexDirection: 'row',
     paddingHorizontal: 20,

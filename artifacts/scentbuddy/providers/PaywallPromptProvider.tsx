@@ -75,7 +75,7 @@ export const [PaywallPromptProvider, usePaywallPrompt] = createContextHook(() =>
       await AsyncStorage.setItem(OPEN_COUNT_KEY, '0');
       await AsyncStorage.setItem(LAST_SHOWN_KEY, String(now));
       console.log('[PaywallPrompt] Showing paywall (trigger:', trigger, ')');
-      router.push('/paywall');
+      router.push({ pathname: '/paywall', params: { source: trigger } });
       return true;
     } catch (e) {
       console.log('[PaywallPrompt] Error:', e);
@@ -112,7 +112,8 @@ export const [PaywallPromptProvider, usePaywallPrompt] = createContextHook(() =>
 
   return useMemo(() => ({
     showPaywallIfEligible: () => maybeShow('manual'),
-    openPaywall: () => router.push('/paywall'),
+    openPaywall: (source: string = 'manual') =>
+      router.push({ pathname: '/paywall', params: { source } }),
     suppressForegroundFor,
   }), [maybeShow, router, suppressForegroundFor]);
 });

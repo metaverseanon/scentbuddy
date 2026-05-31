@@ -10,8 +10,9 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { CaretLeft, Heart, Sparkle, Crown, Users, Drop, MagnifyingGlass } from 'phosphor-react-native';
+import { CaretLeft, Heart, Sparkle, Crown, Users, Drop, MagnifyingGlass, LockSimple } from 'phosphor-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { useRevenueCat } from '@/providers/RevenueCatProvider';
@@ -210,9 +211,34 @@ export default function TwinFinderScreen() {
           ))}
 
           {showLockedCta && (
+            <View style={styles.lockedRowsWrap}>
+              {[0, 1, 2].map((i) => (
+                <View
+                  key={i}
+                  style={[styles.lockedRow, { backgroundColor: colors.card, borderColor: colors.border }]}
+                >
+                  <View style={styles.lockedRowContent}>
+                    <View style={[styles.lockedAvatar, { backgroundColor: colors.accent + '22' }]} />
+                    <View style={styles.lockedRowText}>
+                      <View style={[styles.lockedBarWide, { backgroundColor: colors.border }]} />
+                      <View style={[styles.lockedBarNarrow, { backgroundColor: colors.border }]} />
+                    </View>
+                    <View style={[styles.lockedScore, { backgroundColor: colors.accent + '22' }]} />
+                  </View>
+                  <BlurView
+                    intensity={18}
+                    tint={colors.background === '#ffffff' ? 'light' : 'dark'}
+                    style={StyleSheet.absoluteFill}
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+
+          {showLockedCta && (
             <TouchableOpacity
               style={[styles.lockedCard, { borderColor: colors.accent }]}
-              onPress={openPaywall}
+              onPress={() => openPaywall('twin_finder')}
               activeOpacity={0.85}
             >
               <LinearGradient
@@ -324,6 +350,19 @@ const styles = StyleSheet.create({
   matchStatItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   matchStatText: { fontSize: 12, fontWeight: '600' },
   matchStatDot: { width: 3, height: 3, borderRadius: 2 },
+  lockedRowsWrap: { gap: 10, marginTop: 4 },
+  lockedRow: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 14,
+    overflow: 'hidden',
+  },
+  lockedRowContent: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  lockedAvatar: { width: 48, height: 48, borderRadius: 24 },
+  lockedRowText: { flex: 1, gap: 8 },
+  lockedBarWide: { height: 12, borderRadius: 6, width: '70%' },
+  lockedBarNarrow: { height: 10, borderRadius: 5, width: '45%' },
+  lockedScore: { width: 44, height: 44, borderRadius: 22 },
   lockedCard: {
     borderRadius: 16,
     borderWidth: 1.5,

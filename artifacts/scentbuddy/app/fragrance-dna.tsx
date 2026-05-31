@@ -13,13 +13,16 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
-import { CaretLeft, DownloadSimple, ShareNetwork, Sparkle } from 'phosphor-react-native';
+import { CaretLeft, DownloadSimple, ShareNetwork, Sparkle, LockSimple, Crown } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import * as MediaLibrary from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { useAuth } from '@/providers/AuthProvider';
+import { useRevenueCat } from '@/providers/RevenueCatProvider';
+import { usePaywallPrompt } from '@/providers/PaywallPromptProvider';
 import { supabase } from '@/lib/supabase';
 import { CollectionItem, WearDiaryEntry, SCENT_FAMILIES } from '@/lib/types';
 
@@ -27,6 +30,8 @@ type ActionState = 'idle' | 'saving' | 'sharing';
 
 export default function FragranceDNAScreen() {
   const { user, profile } = useAuth();
+  const { isPro } = useRevenueCat();
+  const { openPaywall } = usePaywallPrompt();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const cardRef = useRef<View>(null);
@@ -151,6 +156,44 @@ export default function FragranceDNAScreen() {
     };
     return moods[top.name] ?? 'Distinctive';
   }, [olfactoryProfile]);
+
+  const deeperInsights = useMemo(() => {
+    let top = 0;
+    let heart = 0;
+    let base = 0;
+    items.forEach(c => {
+      top += (c.top_notes ?? []).length;
+      heart += (c.heart_notes ?? []).length;
+      base += (c.base_notes ?? []).length;
+    });
+    const totalLayered = top + heart + base || 1;
+    const basePct = Math.round((base / totalLayered) * 100);
+    const longevityLean =
+      basePct >= 40 ? 'Long-lasting, deep drydowns' : basePct >= 25 ? 'Balanced longevity' : 'Bright, fleeting openings';
+
+    const distinctFamilies = olfactoryProfile.families.length;
+    const versatility =
+      distinctFamilies >= 5 ? 'Highly versatile' : distinctFamilies >= 3 ? 'Adaptable' : 'Signature-focused';
+
+    const seasonMap: Record<string, string> = {
+      Citrus: 'Spring & Summer',
+      Fresh: 'Spring & Summer',
+      Floral: 'Spring',
+      Woody: 'Autumn & Winter',
+      Oriental: 'Winter',
+      Spicy: 'Autumn & Winter',
+      Gourmand: 'Winter',
+      Leather: 'Autumn & Winter',
+    };
+    const bestSeason = olfactoryProfile.top ? seasonMap[olfactoryProfile.top.name] ?? 'All year' : 'All year';
+
+    return [
+      { label: 'Longevity lean', value: longevityLean },
+      { label: 'Base-note weight', value: `${basePct}% of your layered notes` },
+      { label: 'Versatility', value: `${versatility} · ${distinctFamilies} families` },
+      { label: 'Best season', value: bestSeason },
+    ];
+  }, [items, olfactoryProfile]);
 
   const handleCapture = useCallback(async (): Promise<string | null> => {
     if (!cardRef.current) return null;
@@ -421,6 +464,53 @@ export default function FragranceDNAScreen() {
             </View>
           </View>
         </View>
+
+        {items.length > 0 && (
+          <View style={styles.insightsSection}>
+            <View style={styles.insightsHeaderRow}>
+              <Text style={styles.insightsTitle}>Deeper Insights</Text>
+              {!isPro && (
+                <View style={styles.proTag}>
+                  <Crown size={11} color="#0d0905" weight="fill" />
+                  <Text style={styles.proTagText}>PRO</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.insightsCard}>
+              <View>
+                {deeperInsights.map((row, idx) => (
+                  <View
+                    key={row.label}
+                    style={[styles.insightRow, idx === deeperInsights.length - 1 && { borderBottomWidth: 0 }]}
+                  >
+                    <Text style={styles.insightLabel}>{row.label}</Text>
+                    <Text style={styles.insightValue} numberOfLines={1}>
+                      {isPro ? row.value : '••••••••'}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+              {!isPro && (
+                <>
+                  <BlurView intensity={28} tint="dark" style={StyleSheet.absoluteFill} />
+                  <View style={styles.insightLockOverlay}>
+                    <LockSimple size={22} color="#c49a6c" weight="fill" />
+                    <Text style={styles.insightLockText}>
+                      Unlock your full scent breakdown — longevity, versatility, and seasonal fit.
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.insightUnlockBtn}
+                      onPress={() => openPaywall('fragrance_dna')}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={styles.insightUnlockBtnText}>Unlock with Pro</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        )}
 
         {items.length === 0 && (
           <View style={styles.emptyHint}>
@@ -738,6 +828,94 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700' as const,
     letterSpacing: 0.5,
+  },
+  insightsSection: {
+    marginHorizontal: 16,
+    marginTop: 20,
+  },
+  insightsHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  insightsTitle: {
+    color: '#f0ebe5',
+    fontSize: 16,
+    fontWeight: '800' as const,
+    letterSpacing: 0.3,
+  },
+  proTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#c49a6c',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  proTagText: {
+    color: '#0d0905',
+    fontSize: 10,
+    fontWeight: '800' as const,
+    letterSpacing: 1,
+  },
+  insightsCard: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#14100a',
+    borderWidth: 1,
+    borderColor: '#2a2318',
+    minHeight: 180,
+  },
+  insightRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2318',
+    gap: 12,
+  },
+  insightLabel: {
+    color: '#8b7a68',
+    fontSize: 13,
+    fontWeight: '600' as const,
+  },
+  insightValue: {
+    color: '#e8d8c0',
+    fontSize: 13,
+    fontWeight: '700' as const,
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  insightLockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  insightLockText: {
+    color: '#f0ebe5',
+    fontSize: 13,
+    fontWeight: '600' as const,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  insightUnlockBtn: {
+    backgroundColor: '#c49a6c',
+    paddingHorizontal: 22,
+    paddingVertical: 10,
+    borderRadius: 100,
+    marginTop: 2,
+  },
+  insightUnlockBtnText: {
+    color: '#0d0905',
+    fontSize: 14,
+    fontWeight: '800' as const,
   },
   emptyHint: {
     marginHorizontal: 24,
