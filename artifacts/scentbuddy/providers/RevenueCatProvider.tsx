@@ -33,6 +33,10 @@ function getRCApiKey(): string {
 
 const RC_API_KEY = getRCApiKey();
 const ENTITLEMENT_ID = 'Scent Buddy Pro';
+// Dedicated RevenueCat offering holding the discounted win-back packages. Must be
+// configured in the RevenueCat dashboard (and the underlying app stores) for the
+// win-back offer to show real pricing; absent it, the paywall stays on standard pricing.
+const WINBACK_OFFERING_ID = 'winback';
 const CONFIGURATION_POLL_MS = 250;
 const CONFIGURATION_MAX_ATTEMPTS = 32;
 
@@ -354,6 +358,11 @@ export const [RevenueCatProvider, useRevenueCat] = createContextHook(() => {
 
   const currentOffering = offeringsQuery.data?.current ?? null;
 
+  const winbackPackages = useMemo<PurchasesPackage[]>(
+    () => offeringsQuery.data?.all?.[WINBACK_OFFERING_ID]?.availablePackages ?? [],
+    [offeringsQuery.data],
+  );
+
   const refetchOfferings = useCallback(async () => {
     console.log('[RevenueCat] Manually refetching offerings...');
     const ok = await ensureRevenueCatConfigured(user?.id);
@@ -378,6 +387,7 @@ export const [RevenueCatProvider, useRevenueCat] = createContextHook(() => {
     customerInfo: customerInfoQuery.data ?? null,
     currentOffering,
     packages: currentOffering?.availablePackages ?? [],
+    winbackPackages,
     isLoadingOfferings: isInitializing || offeringsQuery.isLoading || offeringsQuery.isFetching,
     isLoadingCustomerInfo: customerInfoQuery.isLoading,
     purchasePackage: purchaseMutation.mutateAsync,
@@ -398,6 +408,7 @@ export const [RevenueCatProvider, useRevenueCat] = createContextHook(() => {
     customerInfoQuery.data,
     customerInfoQuery.isLoading,
     currentOffering,
+    winbackPackages,
     offeringsQuery.isLoading,
     offeringsQuery.isFetching,
     refetchOfferings,

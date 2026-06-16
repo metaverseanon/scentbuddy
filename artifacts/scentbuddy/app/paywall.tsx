@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { X, Check, Crown, Sparkle, Star, ArrowCounterClockwise, Timer, ShieldCheck } from 'phosphor-react-native';
+import { X, Check, Crown, Sparkle, Star, ArrowCounterClockwise, Timer, ShieldCheck, Gift } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PurchasesPackage } from 'react-native-purchases';
@@ -21,6 +21,7 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { computeArchetype, ScentArchetype } from '@/lib/scent-archetype';
 import { ONBOARDING_QUIZ_KEY, QuizResults } from '@/constants/quiz';
 import { logAnalyticsEvent } from '@/lib/analytics';
+import { isWinbackEligible, markWinbackShown, incrementPaywallDismissCount } from '@/lib/winback';
 
 const PRO_FEATURES = [
   { icon: '✨', title: 'For You Picks, tuned to you', desc: 'Get matched to your perfect scents from 74,000+ fragrances — the moment you log in' },
@@ -66,6 +67,11 @@ function getSavingsText(packages: PurchasesPackage[]): string | null {
   return 'Save 50%';
 }
 
+function priceOf(pkg: PurchasesPackage | undefined): number | null {
+  const price = (pkg?.product as { price?: number } | undefined)?.price;
+  return typeof price === 'number' ? price : null;
+}
+
 export default function PaywallScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -74,6 +80,7 @@ export default function PaywallScreen() {
   const source = params.source ?? 'unknown';
   const {
     packages,
+    winbackPackages,
     isLoadingOfferings,
     purchasePackage,
     isPurchasing,
@@ -86,6 +93,10 @@ export default function PaywallScreen() {
   } = useRevenueCat();
 
   const [selectedPkg, setSelectedPkg] = useState<PurchasesPackage | null>(null);
+  const [winbackMode, setWinbackMode] = useState<boolean>(false);
+  const winbackModeRef = useRef<boolean>(false);
+  winbackModeRef.current = winbackMode;
+  const winbackShownLoggedRef = useRef<boolean>(false);
   const [launchOfferEndsAt, setLaunchOfferEndsAt] = useState<number | null>(null);
   const [now, setNow] = useState<number>(Date.now());
   const [archetype, setArchetype] = useState<ScentArchetype | null>(null);
@@ -174,21 +185,65 @@ export default function PaywallScreen() {
     return () => {
       if (!dismissLoggedRef.current && !convertedRef.current) {
         dismissLoggedRef.current = true;
+        const wasWinback = winbackModeRef.current;
         const secondsViewed = Math.round((Date.now() - viewStartRef.current) / 1000);
         void logAnalyticsEvent('paywall_dismissed', {
           source: sourceRef.current,
           seconds_viewed: secondsViewed,
+          variant: wasWinback ? 'winback' : 'standard',
         });
+        // Only standard-paywall dismissals count toward win-back eligibility; a
+        // dismissed win-back offer is already spent (marked shown on display).
+        if (!wasWinback) {
+          void incrementPaywallDismissCount();
+        }
       }
     };
   }, []);
 
   useEffect(() => {
-    if (packages.length > 0 && !selectedPkg) {
-      const annual = packages.find(isAnnualPlan);
-      setSelectedPkg(annual ?? packages[0]);
-    }
-  }, [packages, selectedPkg]);
+    if (isPro) return;
+    if (winbackMode) return;
+    if (winbackPackages.length === 0) return;
+    // Only present win-back if it is a VERIFIABLE discount vs standard pricing.
+    // If the offering is misconfigured (no comparable standard price, or not
+    // actually cheaper), degrade to the standard paywall rather than claim a
+    // discount we cannot substantiate.
+    const stdAnnual = priceOf(packages.find(isAnnualPlan));
+    const wbAnnual = priceOf(winbackPackages.find(isAnnualPlan));
+    const stdMonthly = priceOf(packages.find(isMonthlyPlan));
+    const wbMonthly = priceOf(winbackPackages.find(isMonthlyPlan));
+    const annualCheaper = stdAnnual !== null && wbAnnual !== null && wbAnnual < stdAnnual;
+    const monthlyCheaper = stdMonthly !== null && wbMonthly !== null && wbMonthly < stdMonthly;
+    if (!annualCheaper && !monthlyCheaper) return;
+    let cancelled = false;
+    (async () => {
+      const eligible = await isWinbackEligible();
+      if (!cancelled && eligible) setWinbackMode(true);
+    })();
+    return () => { cancelled = true; };
+  }, [isPro, winbackMode, winbackPackages, packages]);
+
+  useEffect(() => {
+    if (!winbackMode) return;
+    if (winbackShownLoggedRef.current) return;
+    winbackShownLoggedRef.current = true;
+    void markWinbackShown();
+    void logAnalyticsEvent('winback_offer_shown', { source });
+  }, [winbackMode, source]);
+
+  useEffect(() => {
+    const list = winbackMode ? winbackPackages : packages;
+    if (list.length === 0) return;
+    // Validity is OBJECT membership, not identifier equality: the standard and
+    // win-back offerings commonly reuse the same package identifiers
+    // (e.g. `$rc_annual`), so an identifier match would keep a stale standard
+    // package selected after switching into win-back mode.
+    const stillValid = selectedPkg != null && list.includes(selectedPkg);
+    if (stillValid) return;
+    const annual = list.find(isAnnualPlan);
+    setSelectedPkg(annual ?? list[0]);
+  }, [winbackMode, winbackPackages, packages, selectedPkg]);
 
   useEffect(() => {
     if (isPro) {
@@ -204,27 +259,32 @@ export default function PaywallScreen() {
 
   const handlePurchase = useCallback(async () => {
     if (!selectedPkg) return;
-    const plan = isAnnualPlan(selectedPkg) ? 'yearly' : isMonthlyPlan(selectedPkg) ? 'monthly' : 'other';
-    void logAnalyticsEvent('paywall_purchase_tapped', {
-      source,
-      plan,
-      product_id: selectedPkg.product.identifier,
-    });
+    // Always buy from the currently displayed list so win-back mode purchases the
+    // real discounted package even if `selectedPkg` is a same-identifier standard
+    // package object (standard/win-back offerings reuse `$rc_annual` etc.).
+    const list = winbackMode ? winbackPackages : packages;
+    const pkgToBuy = list.find(p => p.identifier === selectedPkg.identifier) ?? selectedPkg;
+    const plan = isAnnualPlan(pkgToBuy) ? 'yearly' : isMonthlyPlan(pkgToBuy) ? 'monthly' : 'other';
+    const variant = winbackMode ? 'winback' : 'standard';
+    const productId = pkgToBuy.product.identifier;
+    void logAnalyticsEvent('paywall_purchase_tapped', { source, plan, product_id: productId, variant });
+    if (winbackMode) {
+      void logAnalyticsEvent('winback_offer_tapped', { source, plan, product_id: productId });
+    }
     try {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await purchasePackage(selectedPkg);
+      await purchasePackage(pkgToBuy);
       convertedRef.current = true;
-      void logAnalyticsEvent('purchase_completed', {
-        source,
-        plan,
-        product_id: selectedPkg.product.identifier,
-      });
+      void logAnalyticsEvent('purchase_completed', { source, plan, product_id: productId, variant });
+      if (winbackMode) {
+        void logAnalyticsEvent('winback_purchase_completed', { source, plan, product_id: productId });
+      }
     } catch (error: any) {
       if (!error.userCancelled) {
         Alert.alert('Purchase Failed', error.message || 'Something went wrong. Please try again.');
       }
     }
-  }, [selectedPkg, purchasePackage, source]);
+  }, [selectedPkg, purchasePackage, source, winbackMode, winbackPackages, packages]);
 
   const handleRestore = useCallback(async () => {
     if (!rcConfigured) {
@@ -245,7 +305,22 @@ export default function PaywallScreen() {
 
   const savingsText = offerActive ? getSavingsText(packages) : null;
 
-  const annualPkg = packages.find(isAnnualPlan);
+  const displayPackages = winbackMode ? winbackPackages : packages;
+
+  // Real savings: discounted win-back annual price vs the standard annual price.
+  const winbackSavingsPct: number | null = (() => {
+    if (!winbackMode) return null;
+    const wbPrice = priceOf(winbackPackages.find(isAnnualPlan));
+    const stdPrice = priceOf(packages.find(isAnnualPlan));
+    if (wbPrice !== null && stdPrice !== null && stdPrice > 0 && wbPrice < stdPrice) {
+      return Math.round((1 - wbPrice / stdPrice) * 100);
+    }
+    return null;
+  })();
+  const standardAnnualPriceString: string | null =
+    packages.find(isAnnualPlan)?.product.priceString ?? null;
+
+  const annualPkg = displayPackages.find(isAnnualPlan);
   const annualMonthlyEquiv: string | null = (() => {
     if (!annualPkg) return null;
     const product: any = annualPkg.product;
@@ -301,7 +376,18 @@ export default function PaywallScreen() {
           <Animated.View style={[styles.crownContainer, { backgroundColor: goldAccent + '15', transform: [{ scale: crownScale }] }]}>
             <Crown size={48} color={goldAccent} weight="fill" />
           </Animated.View>
-          {archetype ? (
+          {winbackMode ? (
+            <>
+              <Text style={[styles.heroTitle, { color: colors.text }]}>
+                A special offer, <Text style={{ color: goldAccent }}>just for you</Text>
+              </Text>
+              <Text style={[styles.heroSubtitle, { color: colors.subtext }]}>
+                {winbackSavingsPct != null
+                  ? `Here's ${winbackSavingsPct}% off Pro — our lowest price, applied to the plans below.`
+                  : 'Here\u2019s our best price on Pro, applied to the plans below.'}
+              </Text>
+            </>
+          ) : archetype ? (
             <>
               <Text style={[styles.heroTitle, { color: colors.text }]}>
                 Unlock your full <Text style={{ color: goldAccent }}>{archetype.name}</Text> profile
@@ -350,7 +436,19 @@ export default function PaywallScreen() {
           </Animated.View>
         )}
 
-        {offerActive && (
+        {winbackMode ? (
+          <View style={[styles.offerBanner, { backgroundColor: goldAccent + '15', borderColor: goldAccent }]}>
+            <View style={styles.offerBannerLeft}>
+              <Gift size={20} color={goldAccent} weight="fill" />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.offerBannerTitle, { color: colors.text }]}>
+                  {winbackSavingsPct != null ? `Your one-time ${winbackSavingsPct}% discount` : 'Your one-time discount'}
+                </Text>
+                <Text style={[styles.offerBannerSub, { color: colors.subtext }]}>Already applied to the plans below</Text>
+              </View>
+            </View>
+          </View>
+        ) : offerActive ? (
           <View style={[styles.offerBanner, { backgroundColor: goldAccent + '15', borderColor: goldAccent }]}>
             <View style={styles.offerBannerLeft}>
               <Timer size={20} color={goldAccent} weight="fill" />
@@ -363,7 +461,7 @@ export default function PaywallScreen() {
               <Text style={styles.offerCountdownText}>{countdownText}</Text>
             </View>
           </View>
-        )}
+        ) : null}
 
         {annualMonthlyEquiv && (
           <View style={[styles.priceHero, { backgroundColor: colors.card, borderColor: colors.border }]}>
@@ -417,7 +515,7 @@ export default function PaywallScreen() {
             <ActivityIndicator size="large" color={goldAccent} />
             <Text style={[styles.loadingText, { color: colors.subtext }]}>Loading plans...</Text>
           </View>
-        ) : packages.length === 0 ? (
+        ) : displayPackages.length === 0 ? (
           <View style={styles.loadingContainer}>
             {Platform.OS === 'web' ? (
               <>
@@ -456,9 +554,12 @@ export default function PaywallScreen() {
         ) : (
           <View style={styles.packagesSection}>
             <Text style={[styles.sectionLabel, { color: colors.text }]}>Choose your plan</Text>
-            {packages.map((pkg) => {
+            {displayPackages.map((pkg) => {
               const isSelected = selectedPkg?.identifier === pkg.identifier;
               const isAnnual = isAnnualPlan(pkg);
+              const cardSavings = winbackMode
+                ? (isAnnual && winbackSavingsPct != null ? `Save ${winbackSavingsPct}%` : null)
+                : (isAnnual ? savingsText : null);
               return (
                 <TouchableOpacity
                   key={pkg.identifier}
@@ -485,9 +586,9 @@ export default function PaywallScreen() {
                         <Text style={[styles.packageName, { color: colors.text }]}>
                           {isAnnual ? 'Yearly' : 'Monthly'}
                         </Text>
-                        {isAnnual && savingsText && (
+                        {cardSavings && (
                           <View style={[styles.savingsBadge, { backgroundColor: goldAccent }]}>
-                            <Text style={styles.savingsBadgeText}>{savingsText}</Text>
+                            <Text style={styles.savingsBadgeText}>{cardSavings}</Text>
                           </View>
                         )}
                       </View>
@@ -495,11 +596,15 @@ export default function PaywallScreen() {
                     </View>
                   </View>
                   <View style={styles.packageRight}>
-                    {isAnnual && offerActive && (
+                    {isAnnual && winbackMode && standardAnnualPriceString ? (
+                      <Text style={[styles.anchorPrice, { color: colors.subtext }]}>
+                        {standardAnnualPriceString}
+                      </Text>
+                    ) : isAnnual && !winbackMode && offerActive ? (
                       <Text style={[styles.anchorPrice, { color: colors.subtext }]}>
                         $71.90
                       </Text>
-                    )}
+                    ) : null}
                     <Text style={[styles.packagePrice, { color: colors.text }]}>
                       {formatPrice(pkg)}
                     </Text>
@@ -527,9 +632,11 @@ export default function PaywallScreen() {
             <>
               <Sparkle size={20} color="#fff" weight="fill" />
               <Text style={styles.purchaseBtnText}>
-                {isAnnualPlan(selectedPkg)
-                  ? (offerActive ? 'Claim 50% Off — Get Pro' : 'Get Pro Yearly')
-                  : 'Get Pro Monthly'}
+                {winbackMode
+                  ? 'Claim my discount'
+                  : isAnnualPlan(selectedPkg)
+                    ? (offerActive ? 'Claim 50% Off — Get Pro' : 'Get Pro Yearly')
+                    : 'Get Pro Monthly'}
               </Text>
             </>
           )}
