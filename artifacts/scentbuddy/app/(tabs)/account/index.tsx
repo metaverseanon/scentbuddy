@@ -212,7 +212,7 @@ export default function AccountScreen() {
         {!isPro && (
           <TouchableOpacity
             style={[styles.proCard, { backgroundColor: colors.card, borderColor: colors.accent + '40' }]}
-            onPress={() => router.push('/paywall' as any)}
+            onPress={() => router.push({ pathname: '/pro-overview', params: { source: 'account' } } as any)}
             activeOpacity={0.8}
           >
             <View style={[styles.proIcon, { backgroundColor: '#FFF3E0' }]}>
@@ -229,7 +229,11 @@ export default function AccountScreen() {
         )}
 
         {isPro && (
-          <View style={[styles.proActiveCard, { backgroundColor: colors.card, borderColor: colors.accent + '40' }]}>
+          <TouchableOpacity
+            style={[styles.proActiveCard, { backgroundColor: colors.card, borderColor: colors.accent + '40' }]}
+            onPress={() => router.push({ pathname: '/pro-overview', params: { source: 'account_pro' } } as any)}
+            activeOpacity={0.8}
+          >
             <View style={[styles.proIcon, { backgroundColor: colors.accent + '15' }]}>
               <Text style={styles.proIconText}>👑</Text>
             </View>
@@ -237,7 +241,8 @@ export default function AccountScreen() {
               <Text style={[styles.proTitle, { color: colors.accent }]}>Scent Buddy Pro</Text>
               <Text style={[styles.proSubtitle, { color: colors.subtext }]}>You have full access to all features</Text>
             </View>
-          </View>
+            <CaretRight size={18} color={colors.accent} />
+          </TouchableOpacity>
         )}
 
         <View style={[styles.statsRow]}>

@@ -513,6 +513,14 @@ export default function FragranceDNAScreen() {
                     >
                       <Text style={styles.insightUnlockBtnText}>Unlock with Pro</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.insightSeeAllBtn}
+                      onPress={() => router.push({ pathname: '/pro-overview', params: { source: 'fragrance_dna' } } as any)}
+                      activeOpacity={0.7}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Text style={styles.insightSeeAllText}>See everything on Pro</Text>
+                    </TouchableOpacity>
                   </View>
                 </>
               )}
@@ -924,6 +932,16 @@ const styles = StyleSheet.create({
     color: '#0d0905',
     fontSize: 14,
     fontWeight: '800' as const,
+  },
+  insightSeeAllBtn: {
+    marginTop: 12,
+    paddingVertical: 4,
+  },
+  insightSeeAllText: {
+    color: '#c49a6c',
+    fontSize: 13,
+    fontWeight: '700' as const,
+    textDecorationLine: 'underline',
   },
   emptyHint: {
     marginHorizontal: 24,

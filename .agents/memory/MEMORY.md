@@ -1,2 +1,1 @@
-- [ScentBuddy free limits](scentbuddy-free-limits.md) — free caps (collection=5, goals=1) are client-enforced and duplicated per screen; no shared constant. Pro = isPro only.
-- [ScentBuddy RevenueCat readiness](scentbuddy-revenuecat-readiness.md) — gating on `!isPro` is unsafe at startup; isLoadingCustomerInfo is false while configuring and isPro lags customerInfo. Wait for rcConfigured && customerInfo!=null; re-check after awaits.
+- [RevenueCat isPro flicker](revenuecat-ispro-flicker.md) — gate upsell UI on isLoadingCustomerInfo so Pro users never see a locked/paywall flash on mount.

@@ -236,28 +236,38 @@ export default function TwinFinderScreen() {
           )}
 
           {showLockedCta && (
-            <TouchableOpacity
-              style={[styles.lockedCard, { borderColor: colors.accent }]}
-              onPress={() => openPaywall('twin_finder')}
-              activeOpacity={0.85}
-            >
-              <LinearGradient
-                colors={[colors.accent + '20', colors.accent + '08']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={StyleSheet.absoluteFill}
-              />
-              <Crown size={28} color={colors.accent} weight="fill" />
-              <Text style={[styles.lockedTitle, { color: colors.text }]}>
-                More twins waiting
-              </Text>
-              <Text style={[styles.lockedSubtitle, { color: colors.subtext }]}>
-                Unlock all matches, message your twins, and see deep collection overlap with ScentBuddy+.
-              </Text>
-              <View style={[styles.lockedCta, { backgroundColor: colors.accent }]}>
-                <Text style={styles.lockedCtaText}>Unlock all twins</Text>
-              </View>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={[styles.lockedCard, { borderColor: colors.accent }]}
+                onPress={() => openPaywall('twin_finder')}
+                activeOpacity={0.85}
+              >
+                <LinearGradient
+                  colors={[colors.accent + '20', colors.accent + '08']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Crown size={28} color={colors.accent} weight="fill" />
+                <Text style={[styles.lockedTitle, { color: colors.text }]}>
+                  More twins waiting
+                </Text>
+                <Text style={[styles.lockedSubtitle, { color: colors.subtext }]}>
+                  Unlock all matches, message your twins, and see deep collection overlap with ScentBuddy+.
+                </Text>
+                <View style={[styles.lockedCta, { backgroundColor: colors.accent }]}>
+                  <Text style={styles.lockedCtaText}>Unlock all twins</Text>
+                </View>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.lockedSeeAllBtn}
+                onPress={() => router.push({ pathname: '/pro-overview', params: { source: 'twin_finder' } } as any)}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={[styles.lockedSeeAll, { color: colors.accent }]}>See everything on Pro</Text>
+              </TouchableOpacity>
+            </>
           )}
         </ScrollView>
       )}
@@ -377,6 +387,8 @@ const styles = StyleSheet.create({
   lockedSubtitle: { fontSize: 13, textAlign: 'center', lineHeight: 18 },
   lockedCta: { borderRadius: 100, paddingHorizontal: 20, paddingVertical: 10, marginTop: 4 },
   lockedCtaText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  lockedSeeAllBtn: { alignItems: 'center', marginTop: 14, paddingVertical: 4 },
+  lockedSeeAll: { fontSize: 14, fontWeight: '700', textDecorationLine: 'underline' },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
   emptyIcon: { fontSize: 48 },
   emptyTitle: { fontSize: 22, fontWeight: '700', textAlign: 'center' },
