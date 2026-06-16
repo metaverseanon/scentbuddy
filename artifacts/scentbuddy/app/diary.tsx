@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase, forceHttps } from '@/lib/supabase';
 import { WearDiaryEntry, CollectionItem } from '@/lib/types';
+import { useMilestones } from '@/providers/MilestoneProvider';
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 const MOODS = ['😊 Happy', '😌 Relaxed', '💪 Confident', '🥰 Romantic', '😎 Cool', '🤔 Thoughtful'];
@@ -41,6 +42,7 @@ export default function DiaryScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { checkMilestone } = useMilestones();
   const now = new Date();
   const [viewYear, setViewYear] = useState(now.getFullYear());
   const [viewMonth, setViewMonth] = useState(now.getMonth());
@@ -117,6 +119,11 @@ export default function DiaryScreen() {
 
     return { streak, bestStreak, totalWears: wears.length, uniqueScents: uniqueScents.size };
   }, [wears, wearDates]);
+
+  useEffect(() => {
+    if (!wearsQuery.isSuccess) return;
+    checkMilestone({ streak: streakInfo.streak });
+  }, [wearsQuery.isSuccess, streakInfo.streak, checkMilestone]);
 
   const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const hasWornToday = wearDates.has(todayStr);

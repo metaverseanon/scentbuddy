@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useCallback, useState } from 'react';
+import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { BlurView } from 'expo-blur';
 import { useAuth } from '@/providers/AuthProvider';
 import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import { usePaywallPrompt } from '@/providers/PaywallPromptProvider';
+import { useMilestones } from '@/providers/MilestoneProvider';
 import { supabase } from '@/lib/supabase';
 import { CollectionItem, WearDiaryEntry, SCENT_FAMILIES } from '@/lib/types';
 
@@ -32,6 +33,7 @@ export default function FragranceDNAScreen() {
   const { user, profile } = useAuth();
   const { isPro } = useRevenueCat();
   const { openPaywall } = usePaywallPrompt();
+  const { checkMilestone } = useMilestones();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const cardRef = useRef<View>(null);
@@ -67,6 +69,12 @@ export default function FragranceDNAScreen() {
 
   const items = useMemo(() => collectionQuery.data ?? [], [collectionQuery.data]);
   const wearEntries = useMemo(() => wearsQuery.data ?? [], [wearsQuery.data]);
+
+  useEffect(() => {
+    if (isPro) return;
+    if (!collectionQuery.isSuccess) return;
+    checkMilestone({ dnaItemCount: items.length });
+  }, [isPro, collectionQuery.isSuccess, items.length, checkMilestone]);
 
   const topNotes = useMemo(() => {
     const noteCounts: Record<string, number> = {};

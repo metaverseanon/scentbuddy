@@ -24,6 +24,7 @@ import { CollectionItem, WishlistItem, WearDiaryEntry, NewsArticle } from '@/lib
 import { LinearGradient } from 'expo-linear-gradient';
 import FloatingNotes from '@/components/FloatingNotes';
 import BrandedLogo from '@/components/BrandedLogo';
+import { useMilestones } from '@/providers/MilestoneProvider';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -47,6 +48,7 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { checkMilestone } = useMilestones();
   const [activeNewsIndex, setActiveNewsIndex] = useState(0);
 
   const logoSlide = useRef(new Animated.Value(30)).current;
@@ -225,6 +227,11 @@ export default function HomeScreen() {
       totalWears: wears.length,
     };
   }, [collection, wears]);
+
+  useEffect(() => {
+    if (!wearsQuery.isSuccess) return;
+    checkMilestone({ streak: stats.streak });
+  }, [wearsQuery.isSuccess, stats.streak, checkMilestone]);
 
   const mostWorn = useMemo(() => {
     const counts: Record<string, { name: string; brand: string; count: number; image: string | null }> = {};

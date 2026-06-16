@@ -32,6 +32,7 @@ import { CONCENTRATIONS, SEASONS, OCCASIONS } from '@/constants/themes';
 import ErrorBoundary from '@/components/ErrorBoundary';
 import UsageMeter from '@/components/UsageMeter';
 import { useRevenueCat } from '@/providers/RevenueCatProvider';
+import { useMilestones } from '@/providers/MilestoneProvider';
 
 let analyzeFragranceProfile: any;
 let getSeasonSuitability: any;
@@ -81,6 +82,7 @@ function CollectionScreenInner() {
   const { user, profile } = useAuth();
   const { colors } = useTheme();
   const { isPro } = useRevenueCat();
+  const { checkMilestone } = useMilestones();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -203,6 +205,12 @@ function CollectionScreenInner() {
     const tried = collection.filter(c => c.status === 'tried').length;
     return { perfumes: collection.length, brands: brands.size, favorites, owned, tried };
   }, [collection]);
+
+  useEffect(() => {
+    if (isPro) return;
+    if (!collectionQuery.isSuccess) return;
+    checkMilestone({ collectionCount: stats.perfumes });
+  }, [isPro, collectionQuery.isSuccess, stats.perfumes, checkMilestone]);
 
   const toggleFavorite = useMutation({
     mutationFn: async ({ id, isFavorite }: { id: string; isFavorite: boolean }) => {

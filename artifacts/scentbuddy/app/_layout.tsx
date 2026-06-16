@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/providers/ThemeProvider";
 import { NotificationProvider } from "@/providers/NotificationProvider";
 import { RevenueCatProvider } from "@/providers/RevenueCatProvider";
 import { PaywallPromptProvider } from "@/providers/PaywallPromptProvider";
+import { MilestoneProvider, MilestoneCelebrationHost } from "@/providers/MilestoneProvider";
 import OnboardingScreen from "@/app/onboarding";
 import AnimatedSplash from "@/components/AnimatedSplash";
 import WhatsNewModal from "@/components/WhatsNewModal";
@@ -97,6 +98,7 @@ function RootLayoutNav() {
         <Stack.Screen name="monthly-wrapped" options={{ headerShown: false, presentation: "card" }} />
       </Stack>
       {!showSplash && <WhatsNewModal />}
+      {!showSplash && <MilestoneCelebrationHost />}
       {showSplash && <AnimatedSplash onFinish={handleSplashFinish} />}
     </>
   );
@@ -111,7 +113,9 @@ export default function RootLayout() {
             <RevenueCatProvider>
               <NotificationProvider>
                 <PaywallPromptProvider>
-                  <RootLayoutNav />
+                  <MilestoneProvider>
+                    <RootLayoutNav />
+                  </MilestoneProvider>
                 </PaywallPromptProvider>
               </NotificationProvider>
             </RevenueCatProvider>
