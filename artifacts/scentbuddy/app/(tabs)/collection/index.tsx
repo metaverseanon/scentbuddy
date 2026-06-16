@@ -30,6 +30,7 @@ import { supabase, searchFragrances, forceHttps } from '@/lib/supabase';
 import { CollectionItem, SearchResult } from '@/lib/types';
 import { CONCENTRATIONS, SEASONS, OCCASIONS } from '@/constants/themes';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import UsageMeter from '@/components/UsageMeter';
 import { useRevenueCat } from '@/providers/RevenueCatProvider';
 
 let analyzeFragranceProfile: any;
@@ -415,6 +416,13 @@ function CollectionScreenInner() {
         ))}
       </View>
 
+      <UsageMeter
+        label="Free collection"
+        current={stats.perfumes}
+        limit={FREE_COLLECTION_LIMIT}
+        source="limit_collection"
+      />
+
       <View style={[styles.searchBar, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <Search size={18} color={colors.subtext} />
         <TextInput
@@ -653,7 +661,7 @@ function AddPerfumeModal({ visible, onClose, userId, isPro, collectionCount }: {
         onClose();
         Alert.alert('Pro Feature', err.message, [
           { text: 'Not Now', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => router.push('/paywall') },
+          { text: 'Upgrade', onPress: () => router.push('/paywall?source=limit_collection') },
         ]);
       } else {
         Alert.alert('Error', err.message);

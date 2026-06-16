@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Flashlight, Scan, Check, Drop, Heart, Camera, ArrowCounterClockwise } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/providers/AuthProvider';
@@ -23,8 +23,11 @@ import { useTheme } from '@/providers/ThemeProvider';
 import { supabase, searchFragrances, forceHttps } from '@/lib/supabase';
 import { apiUrl } from '@/lib/api';
 import { SearchResult } from '@/lib/types';
+import UsageMeter from '@/components/UsageMeter';
 
 type ScanMode = 'barcode' | 'photo';
+
+const FREE_COLLECTION_LIMIT = 5;
 
 export default function ScannerScreen() {
   const { user, profile } = useAuth();
@@ -33,6 +36,20 @@ export default function ScannerScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
+
+  const collectionCountQuery = useQuery({
+    queryKey: ['collection-count', user?.id],
+    queryFn: async () => {
+      if (!user?.id) return 0;
+      const { count } = await supabase
+        .from('user_collections')
+        .select('*', { count: 'exact', head: true })
+        .eq('user_id', user.id);
+      return count ?? 0;
+    },
+    enabled: !!user?.id && !isPro,
+  });
+  const collectionCount = collectionCountQuery.data;
 
   const [scannedData, setScannedData] = useState<string | null>(null);
   const [torchOn, setTorchOn] = useState(false);
@@ -174,8 +191,8 @@ export default function ScannerScreen() {
           .from('user_collections')
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id);
-        if ((count ?? 0) >= 20) {
-          throw new Error('Free accounts are limited to 20 perfumes. Upgrade to Pro!');
+        if ((count ?? 0) >= FREE_COLLECTION_LIMIT) {
+          throw new Error(`Free accounts are limited to ${FREE_COLLECTION_LIMIT} fragrances. Upgrade to Pro!`);
         }
       }
 
@@ -210,12 +227,13 @@ export default function ScannerScreen() {
         return { ...prev, [key]: current === 'wishlist' ? 'both' : 'collection' };
       });
       void queryClient.invalidateQueries({ queryKey: ['collection', user?.id] });
+      void queryClient.invalidateQueries({ queryKey: ['collection-count', user?.id] });
     },
     onError: (err: Error) => {
       if (err.message.includes('limited to')) {
         Alert.alert('Pro Feature', err.message, [
           { text: 'Not Now', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => router.push('/paywall') },
+          { text: 'Upgrade', onPress: () => router.push('/paywall?source=limit_scanner') },
         ]);
       } else {
         Alert.alert('Error', err.message);
@@ -309,6 +327,7 @@ export default function ScannerScreen() {
       searching={searching}
       searchResults={searchResults}
       addedItems={addedItems}
+      collectionCount={collectionCount}
       cameraReady={cameraReady}
       setCameraReady={setCameraReady}
       scanLineAnim={scanLineAnim}
@@ -340,6 +359,7 @@ function ScannerWithCamera({
   searching,
   searchResults,
   addedItems,
+  collectionCount,
   cameraReady,
   setCameraReady,
   scanLineAnim,
@@ -458,6 +478,16 @@ function ScannerWithCamera({
             )}
           </TouchableOpacity>
         </View>
+
+        {typeof collectionCount === 'number' && (
+          <UsageMeter
+            label="Free collection"
+            current={collectionCount}
+            limit={FREE_COLLECTION_LIMIT}
+            source="limit_scanner"
+            containerStyle={{ marginHorizontal: 16, marginTop: 8 }}
+          />
+        )}
 
         {!scannedData && (
           <View style={styles.modeToggleWrap}>

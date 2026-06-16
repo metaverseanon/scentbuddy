@@ -1,2 +1,1 @@
-- [ScentBuddy Pro & onboarding](scentbuddy-pro-and-onboarding.md) — Pro = RevenueCat entitlement only (not profiles.is_pro); onboarding renders pre-auth outside router Stack, use in-component phases + AsyncStorage sync at signUp.
-- [ScentBuddy paywall analytics](scentbuddy-paywall-analytics.md) — log paywall_dismissed via unmount cleanup + convertedRef (not just X handler); hard-gate locked Pro content with masked values, not just blur.
+- [ScentBuddy free limits](scentbuddy-free-limits.md) — free caps (collection=5, goals=1) are client-enforced and duplicated per screen; no shared constant. Pro = isPro only.

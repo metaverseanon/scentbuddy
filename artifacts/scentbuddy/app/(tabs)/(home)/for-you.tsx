@@ -670,7 +670,7 @@ export default function ForYouScreen() {
               </Text>
               <TouchableOpacity
                 style={[styles.proGateBtn, { backgroundColor: colors.accent, paddingHorizontal: 28 }]}
-                onPress={() => router.push('/paywall')}
+                onPress={() => router.push('/paywall?source=limit_smartpicks')}
               >
                 <Crown size={16} color="#fff" weight="fill" />
                 <Text style={styles.proGateBtnText}>See My Matches</Text>
@@ -799,7 +799,7 @@ export default function ForYouScreen() {
               style={[styles.proGateBtn, { backgroundColor: colors.accent }]}
               onPress={() => {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push('/paywall' as any);
+                router.push('/paywall?source=limit_smartpicks' as any);
               }}
               activeOpacity={0.8}
             >

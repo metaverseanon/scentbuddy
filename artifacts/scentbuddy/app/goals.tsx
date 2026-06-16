@@ -32,6 +32,7 @@ import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '@/lib/supabase';
 import { CollectionItem, WearDiaryEntry } from '@/lib/types';
+import UsageMeter from '@/components/UsageMeter';
 
 const GOALS_KEY = 'scentbuddy_goals';
 const FREE_GOAL_LIMIT = 1;
@@ -163,10 +164,10 @@ function AnimatedProgressBar({ progress, color, delay }: { progress: number; col
 }
 
 export default function GoalsScreen() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { colors } = useTheme();
   const { isPro } = useRevenueCat();
-  const hasPro = isPro || !!profile?.is_pro;
+  const hasPro = isPro;
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -394,7 +395,7 @@ export default function GoalsScreen() {
     onError: (error: Error) => {
       Alert.alert('Upgrade to Pro', error.message, [
         { text: 'Not Now', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => router.push('/paywall' as any) },
+        { text: 'Upgrade', onPress: () => router.push('/paywall?source=limit_goals' as any) },
       ]);
     },
   });
@@ -444,7 +445,7 @@ export default function GoalsScreen() {
         `Free accounts can have ${FREE_GOAL_LIMIT} active goal. Upgrade to Pro for unlimited goals!`,
         [
           { text: 'Not Now', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => router.push('/paywall' as any) },
+          { text: 'Upgrade', onPress: () => router.push('/paywall?source=limit_goals' as any) },
         ]
       );
       return;
@@ -492,6 +493,14 @@ export default function GoalsScreen() {
             <Plus size={18} color="#fff" weight="bold" />
           </TouchableOpacity>
         </View>
+
+        <UsageMeter
+          label="Free goals"
+          current={activeGoals.length}
+          limit={FREE_GOAL_LIMIT}
+          source="limit_goals"
+          containerStyle={{ marginHorizontal: 20 }}
+        />
 
         {activeGoals.length > 0 && (
           <View style={[styles.overviewCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
