@@ -1,12 +1,16 @@
 import { supabase } from '@/lib/supabase';
+import { getPendingReferralCode, clearPendingReferralCode } from '@/lib/referralLink';
 
 export const REFERRAL_GOAL = 5;
 export const REFERRAL_SHARE_URL = 'https://scentbuddy.io/join';
 
-export async function grantReferralProViaRevenueCat(userId: string): Promise<{ granted: number } | null> {
+// Reconcile referral-earned Pro for the CURRENT authenticated user. The server
+// derives the user from the JWT and ignores any body, so this can never grant
+// Pro to anyone else. Idempotent — safe to call on every Referrals-screen open.
+export async function grantReferralProViaRevenueCat(): Promise<{ granted: number } | null> {
   try {
     const { data, error } = await supabase.functions.invoke('grant-referral-pro', {
-      body: { userId },
+      body: {},
     });
     if (error) {
       console.log('[referrals] grant-referral-pro error:', error);
@@ -67,23 +71,11 @@ export function generateReferralCode(username: string | null, userId: string): s
 export async function getOrCreateReferralCode(userId: string, username: string | null): Promise<string> {
   console.log('Getting or creating referral code for user:', userId);
 
-  const { data: existing } = await supabase
-    .from('user_referrals')
-    .select('referral_code')
-    .eq('referrer_id', userId)
-    .limit(1)
-    .maybeSingle();
-
-  if (existing?.referral_code) {
-    console.log('Found existing referral code:', existing.referral_code);
-    return existing.referral_code;
-  }
-
   const { data: profile } = await supabase
     .from('profiles')
     .select('referral_code')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   if (profile?.referral_code) {
     console.log('Found referral code on profile:', profile.referral_code);
@@ -104,11 +96,14 @@ export async function getOrCreateReferralCode(userId: string, username: string |
 export async function fetchReferralStats(userId: string): Promise<ReferralStats> {
   console.log('Fetching referral stats for user:', userId);
 
+  // NOTE: Pro status itself is owned by RevenueCat (useRevenueCat().isPro). The
+  // columns read here are a display-only mirror written by the server when Pro
+  // months are granted — they are never used as the Pro source of truth.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('referral_code, is_pro, pro_expires_at, referral_reward_months')
+    .select('referral_code, pro_expires_at, referral_reward_months')
     .eq('id', userId)
-    .single();
+    .maybeSingle();
 
   const referralCode = profile?.referral_code || '';
 
@@ -134,7 +129,7 @@ export async function fetchReferralStats(userId: string): Promise<ReferralStats>
     referralCode,
     totalReferred,
     completedReferrals,
-    rewardGranted: hasActiveReward || (profile?.is_pro ?? false),
+    rewardGranted: hasActiveReward,
     monthsEarned,
     proExpiresAt,
     nextRewardIn,
@@ -174,58 +169,55 @@ export async function fetchReferralsList(userId: string): Promise<Referral[]> {
   return (data as unknown as Referral[]) ?? [];
 }
 
-export async function trackReferralSignUp(
-  referralCode: string,
-  newUserId: string
-): Promise<boolean> {
-  console.log('Tracking referral sign-up with code:', referralCode, 'for user:', newUserId);
+export interface RecordReferralResult {
+  ok: boolean;
+  attributed?: boolean;
+  reason?: string;
+}
 
-  const { data: referrer } = await supabase
-    .from('profiles')
-    .select('id')
-    .eq('referral_code', referralCode.trim().toUpperCase())
-    .maybeSingle();
-
-  if (!referrer) {
-    console.log('No referrer found for code:', referralCode);
-    return false;
-  }
-
-  if (referrer.id === newUserId) {
-    console.log('User tried to use their own referral code');
-    return false;
-  }
-
-  const { error: insertError } = await supabase
-    .from('user_referrals')
-    .insert({
-      referrer_id: referrer.id,
-      referred_id: newUserId,
-      referral_code: referralCode.trim().toUpperCase(),
-      status: 'completed',
-      completed_at: new Date().toISOString(),
+// Attribute the current authenticated user to a referrer via the secure Edge
+// Function. The referred id is taken from the JWT server-side; we only send the
+// code. The server resolves the referrer, rejects self/duplicate/invalid codes,
+// writes the referral with the service role, and reconciles the referrer's Pro.
+export async function recordReferralSignupViaServer(referralCode: string): Promise<RecordReferralResult> {
+  const code = referralCode.trim().toUpperCase();
+  if (!code) return { ok: true, attributed: false, reason: 'no_code' };
+  try {
+    const { data, error } = await supabase.functions.invoke('record-referral-signup', {
+      body: { referralCode: code },
     });
-
-  if (insertError) {
-    console.log('Error inserting referral:', insertError);
-    return false;
+    if (error) {
+      console.log('[referrals] record-referral-signup error:', error);
+      return { ok: false, reason: 'request_failed' };
+    }
+    console.log('[referrals] record-referral-signup response:', data);
+    return data as RecordReferralResult;
+  } catch (e) {
+    console.log('[referrals] record-referral-signup threw:', e);
+    return { ok: false, reason: 'request_failed' };
   }
+}
 
-  const { data: referrals } = await supabase
-    .from('user_referrals')
-    .select('id')
-    .eq('referrer_id', referrer.id)
-    .eq('status', 'completed');
+// Reasons that mean "stop retrying" — clear the stored code.
+const TERMINAL_REASONS = new Set([
+  'no_code',
+  'invalid_code',
+  'self_referral',
+  'already_attributed',
+  'account_too_old',
+]);
 
-  const completedCount = referrals?.length ?? 0;
-  console.log('Referrer now has', completedCount, 'completed referrals');
-
-  if (completedCount > 0 && completedCount % REFERRAL_GOAL === 0) {
-    console.log('Referrer hit a new reward milestone! Triggering RC grant for:', referrer.id);
-    await grantReferralProViaRevenueCat(referrer.id);
+// Called once the user is authenticated: if a referral code is pending, attribute
+// it. Transient failures (e.g. profile_not_ready, network) keep the code so it is
+// retried on a later launch; terminal outcomes clear it.
+export async function consumePendingReferral(): Promise<void> {
+  const code = await getPendingReferralCode();
+  if (!code) return;
+  const result = await recordReferralSignupViaServer(code);
+  const terminal = result.ok || (!!result.reason && TERMINAL_REASONS.has(result.reason));
+  if (terminal) {
+    await clearPendingReferralCode();
   }
-
-  return true;
 }
 
 export function getReferralShareMessage(code: string): string {

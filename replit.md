@@ -33,7 +33,7 @@ Fragrance tracking and discovery app originally built with Rork, migrated to Rep
 - Fragrance DNA (scent profile)
 - Statistics and diary
 - Scent goals
-- Referrals
+- **Referral-earned Pro** (`app/referrals.tsx`) — inviting friends grants REAL Pro time: every 5 completed referrals = 1 free month, **server-enforced and idempotent**. Pro source of truth is the RevenueCat entitlement `Scent Buddy Pro` ONLY (`useRevenueCat().isPro`); `profiles.pro_*` + `referral_reward_months` are a display-only mirror, never the gate. Attribution flow: a `?ref=CODE` deep link (or sign-up form) is captured to AsyncStorage (`lib/referralLink.ts`), then attributed once authenticated via the `record-referral-signup` Edge Function — `referred_id` is taken from the JWT (never the body), so it can't be forged. Rewards are reconciled by the `grant-referral-pro` Edge Function (caller-from-JWT only), which claims milestones atomically against the `referral_reward_grants` ledger and grants Pro via the RevenueCat REST API. Clients have READ-only RLS on referral tables; all writes are service-role. Ships JS-only via EAS Update (no new native modules). **Edge Functions + migration must be deployed from a machine with the Supabase CLI — they can't be deployed/tested from Replit** (see `supabase/functions/README.md`).
 - Paywall / Pro subscription via RevenueCat — **conversion-optimized**: paywall pushed at end of onboarding (right after quiz), `PaywallPromptProvider` trigger thresholds = 1 open before first show / 2 between / 12h interval. Paywall copy is benefit-led ("Discover scents you'll actually love") with social proof, testimonial, anchor pricing ($71.90 → $35.95/yr 50% off, monthly $5.99 always full price), and free-vs-Pro contrasts. Onboarding sets `paywall_last_shown_at` before pushing to avoid immediate re-trigger. **No free trial** (per user preference)
 - Supabase backend for auth and data
 - **Twin Finder** (`app/twin-finder.tsx`) — finds users with the most overlap in collection (shared bottles + shared notes). Free: top 3, Pro: top 100. Server-enforced via `get_twin_matches` RPC; client cannot bypass the cap.
@@ -45,6 +45,10 @@ Fragrance tracking and discovery app originally built with Rork, migrated to Rep
 ### Supabase Migrations
 - `artifacts/scentbuddy/supabase/migrations/2026_05_community_posts.sql` — creates `community_posts` table, RLS, and `post-images` storage bucket with owner-scoped policies. Idempotent.
 - `artifacts/scentbuddy/supabase/migrations/2026_05_blind_tests.sql` — creates `blind_tests`, `blind_test_ratings` tables, RLS, plus SECURITY DEFINER RPCs `get_blind_test`, `get_ratable_blind_tests`, `get_twin_matches`. Idempotent — paste into the Supabase SQL editor to apply.
+- `artifacts/scentbuddy/supabase/migrations/2026_06_referral_pro.sql` — referral-earned Pro: adds `profiles` columns (`referral_code` unique, `referral_reward_months`, `pro_expires_at`, `pro_since`, `pro_source`), `user_referrals` (FKs → profiles `ON DELETE CASCADE`, `unique(referred_id)`, keeps the `user_referrals_referred_id_fkey` name for the PostgREST embed), and the `referral_reward_grants` ledger (PK `referrer_id, milestone_number`). RLS = read-own-only; no client writes. Idempotent.
+
+### Supabase Edge Functions
+- `artifacts/scentbuddy/supabase/functions/` — Deno functions for referral-earned Pro: `record-referral-signup`, `grant-referral-pro`, shared `_shared/reconcile.ts` + `_shared/cors.ts`. Excluded from the Expo tsconfig (`exclude: ["supabase/functions"]`) since they are Deno, not RN. Deploy with the Supabase CLI; see `supabase/functions/README.md`. Requires secrets `REVENUECAT_SECRET_API_KEY`, `REVENUECAT_PROJECT_ID`, `REVENUECAT_ENTITLEMENT_ID` (defaults to `Scent Buddy Pro`); `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` are auto-provided by the Edge runtime.
 
 ### Key Source Files
 - `artifacts/scentbuddy/app/_layout.tsx` — root layout, providers, onboarding gating

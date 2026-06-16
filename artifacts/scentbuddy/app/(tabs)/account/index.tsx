@@ -30,7 +30,7 @@ import ProfileAvatar from '@/components/ProfileAvatar';
 import { useNotifications, sendLocalNotification } from '@/providers/NotificationProvider';
 import { usePaywallPrompt } from '@/providers/PaywallPromptProvider';
 import { useRouter } from 'expo-router';
-import { REFERRAL_GOAL } from '@/lib/referrals';
+import { REFERRAL_GOAL, fetchReferralStats } from '@/lib/referrals';
 
 const THEME_OPTIONS: { key: ThemeName; label: string; colors: [string, string] }[] = [
   { key: 'classic', label: 'Classic', colors: ['#f5f0e8', '#c49a6c'] },
@@ -149,6 +149,13 @@ export default function AccountScreen() {
       console.log('Share error');
     }
   }, []);
+
+  const referralStatsQuery = useQuery({
+    queryKey: ['referral-stats-account', user?.id],
+    queryFn: () => fetchReferralStats(user!.id),
+    enabled: !!user?.id,
+  });
+  const referralStats = referralStatsQuery.data;
 
   if (!user) {
     return (
@@ -447,9 +454,18 @@ export default function AccountScreen() {
           </View>
           <View style={styles.referralCardInfo}>
             <Text style={[styles.referralCardTitle, { color: colors.text }]}>Referral Program</Text>
-            <Text style={[styles.referralCardSub, { color: colors.subtext }]}>
-              Invite {REFERRAL_GOAL} friends & get Pro free!
-            </Text>
+            {referralStats ? (
+              <Text style={[styles.referralCardSub, { color: colors.subtext }]}>
+                {referralStats.completedReferrals} invited · {referralStats.nextRewardIn} more for the next free month
+                {referralStats.monthsEarned > 0
+                  ? ` · ${referralStats.monthsEarned} month${referralStats.monthsEarned !== 1 ? 's' : ''} earned`
+                  : ''}
+              </Text>
+            ) : (
+              <Text style={[styles.referralCardSub, { color: colors.subtext }]}>
+                Invite {REFERRAL_GOAL} friends & get a free month of Pro
+              </Text>
+            )}
           </View>
           <CaretRight size={18} color={colors.subtext} />
         </TouchableOpacity>

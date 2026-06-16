@@ -19,6 +19,7 @@ import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
+import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import {
   REFERRAL_GOAL,
   fetchReferralStats,
@@ -34,6 +35,7 @@ import ProBadge from '@/components/ProBadge';
 export default function ReferralsScreen() {
   const { user, profile } = useAuth();
   const { colors } = useTheme();
+  const { refreshCustomerInfo } = useRevenueCat();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const progressAnim = useRef(new Animated.Value(0)).current;
@@ -62,7 +64,11 @@ export default function ReferralsScreen() {
     queryFn: async () => {
       if (!user?.id) return null;
       const code = await getOrCreateReferralCode(user.id, profile?.username ?? null);
-      await grantReferralProViaRevenueCat(user.id);
+      const grant = await grantReferralProViaRevenueCat();
+      // If new Pro months were granted, refresh RC so isPro updates immediately.
+      if (grant && grant.granted > 0) {
+        await refreshCustomerInfo();
+      }
       const stats = await fetchReferralStats(user.id);
       return { ...stats, referralCode: code || stats.referralCode };
     },
@@ -282,7 +288,7 @@ export default function ReferralsScreen() {
 
               {referrals.length === 0 ? (
                 <View style={[styles.emptyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  <Text style={[styles.emptyIcon]}>🫧</Text>
+                  <Users size={36} color={colors.subtext} weight="duotone" style={styles.emptyIcon} />
                   <Text style={[styles.emptyTitle, { color: colors.text }]}>No referrals yet</Text>
                   <Text style={[styles.emptySubtext, { color: colors.subtext }]}>
                     Share your code with friends to start earning Pro!

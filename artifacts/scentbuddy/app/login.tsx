@@ -19,6 +19,7 @@ import { Eye, EyeSlash, Check, X, WarningCircle } from 'phosphor-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { supabase } from '@/lib/supabase';
+import { getPendingReferralCode } from '@/lib/referralLink';
 import FloatingNotes from '@/components/FloatingNotes';
 import BrandedLogo from '@/components/BrandedLogo';
 
@@ -100,6 +101,16 @@ export default function LoginScreen() {
       useNativeDriver: false,
     }).start();
   }, [isSignUp, fadeAnim]);
+
+  // Prefill a referral code captured from a deep link and switch to sign-up.
+  useEffect(() => {
+    void getPendingReferralCode().then((code) => {
+      if (code) {
+        setReferralCode(code);
+        setIsSignUp(true);
+      }
+    });
+  }, []);
 
   const checkUsername = useCallback((value: string) => {
     if (usernameTimeout.current) clearTimeout(usernameTimeout.current);

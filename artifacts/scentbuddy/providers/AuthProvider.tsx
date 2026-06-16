@@ -7,7 +7,8 @@ import { Profile } from '@/lib/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { ONBOARDING_QUIZ_KEY, QuizResults, STARTER_COLLECTION_KEY, StarterPick } from '@/constants/quiz';
-import { trackReferralSignUp, generateReferralCode } from '@/lib/referrals';
+import { generateReferralCode, consumePendingReferral } from '@/lib/referrals';
+import { setPendingReferralCode } from '@/lib/referralLink';
 import { AppsFlyerEvents } from '@/lib/appsflyer';
 import { TikTokEvents } from '@/lib/tiktok';
 
@@ -31,6 +32,15 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
     return () => subscription.unsubscribe();
   }, [queryClient]);
+
+  // Once authenticated, attribute any pending referral code (from a deep link or
+  // the sign-up form) to its referrer via the secure Edge Function. referred_id
+  // is derived server-side from the JWT, so it can't be forged.
+  useEffect(() => {
+    if (session?.user?.id) {
+      void consumePendingReferral();
+    }
+  }, [session?.user?.id]);
 
   const profileQuery = useQuery({
     queryKey: ['profile', session?.user?.id],
@@ -64,6 +74,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
   const signUpMutation = useMutation({
     mutationFn: async ({ email, password, username, displayName, referralCode }: { email: string; password: string; username: string; displayName: string; referralCode?: string }) => {
+      // Store the referral code BEFORE auth state changes so neither the
+      // consumePendingReferral effect nor the explicit consume below can miss it.
+      if (referralCode?.trim()) {
+        await setPendingReferralCode(referralCode);
+      }
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
@@ -163,14 +178,11 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
         void AppsFlyerEvents.registration(data.user.id, email);
         void TikTokEvents.registration(data.user.id, email);
 
-        if (referralCode?.trim()) {
-          try {
-            const tracked = await trackReferralSignUp(referralCode.trim(), data.user.id);
-            console.log('Referral tracking result:', tracked);
-          } catch (e) {
-            console.log('Failed to track referral:', e);
-          }
-        }
+        // Attribute the referral now that the profile row exists and (usually) a
+        // session is active. Attribution is server-side: referred_id comes from
+        // the JWT, never the body. If there's no session yet (email confirmation
+        // required), this no-ops and the consume effect retries after sign-in.
+        await consumePendingReferral();
       }
       return data;
     },
@@ -222,12 +234,8 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       console.log('Error deleting goals:', e);
     }
 
-    try {
-      await supabase.from('referrals').delete().eq('referrer_id', userId);
-      console.log('Deleted referrals');
-    } catch (e) {
-      console.log('Error deleting referrals:', e);
-    }
+    // Referral rows (user_referrals + referral_reward_grants) are removed
+    // automatically via ON DELETE CASCADE when the profile is deleted below.
 
     try {
       await supabase.from('profiles').delete().eq('id', userId);

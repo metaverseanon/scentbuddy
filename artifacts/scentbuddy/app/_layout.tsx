@@ -15,6 +15,7 @@ import AnimatedSplash from "@/components/AnimatedSplash";
 import WhatsNewModal from "@/components/WhatsNewModal";
 import { initAppsFlyer } from "@/lib/appsflyer";
 import { initTikTok } from "@/lib/tiktok";
+import { useCaptureReferralLink } from "@/lib/referralLink";
 
 
 const ONBOARDING_KEY = 'scentbuddy_onboarding_done';
@@ -27,6 +28,8 @@ function RootLayoutNav() {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+
+  useCaptureReferralLink();
 
   useEffect(() => {
     const checkOnboarding = async () => {
