@@ -12,6 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/providers/AuthProvider';
 import { AppsFlyerEvents } from '@/lib/appsflyer';
 import { TikTokEvents } from '@/lib/tiktok';
+import { MetaEvents } from '@/lib/meta';
 
 const FALLBACK_REVENUECAT_TEST_API_KEY = 'test_dZlhOfaQUxxuEKpMZbEqFSWghPI';
 const FALLBACK_REVENUECAT_IOS_API_KEY = 'appl_TvsAKMkYQfMJDMqwtpCEkjnpcOX';
@@ -311,12 +312,15 @@ export const [RevenueCatProvider, useRevenueCat] = createContextHook(() => {
           if (isTrial) {
             void AppsFlyerEvents.startTrial(user.id, price, currency, productId);
             void TikTokEvents.startTrial(user.id, price, currency, productId);
+            MetaEvents.startTrial(user.id, price, currency, productId);
           } else {
             void AppsFlyerEvents.subscribe(user.id, price, currency, productId);
             void TikTokEvents.subscribe(user.id, price, currency, productId);
+            MetaEvents.subscribe(user.id, price, currency, productId);
           }
           void AppsFlyerEvents.purchase(user.id, price, currency, productId);
           void TikTokEvents.purchase(user.id, price, currency, productId);
+          MetaEvents.purchase(user.id, price, currency, productId);
         }
       } catch (error) {
         console.log('[RevenueCat] AppsFlyer/TikTok track error:', normalizeError(error));

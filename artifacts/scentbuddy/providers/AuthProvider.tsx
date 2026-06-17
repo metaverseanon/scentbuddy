@@ -11,6 +11,7 @@ import { generateReferralCode, consumePendingReferral } from '@/lib/referrals';
 import { setPendingReferralCode } from '@/lib/referralLink';
 import { AppsFlyerEvents } from '@/lib/appsflyer';
 import { TikTokEvents } from '@/lib/tiktok';
+import { MetaEvents } from '@/lib/meta';
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const [session, setSession] = useState<Session | null>(null);
@@ -67,6 +68,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       if (data.user) {
         void AppsFlyerEvents.login(data.user.id, data.user.email ?? email);
         void TikTokEvents.login(data.user.id, data.user.email ?? email);
+        MetaEvents.login(data.user.id, data.user.email ?? email);
       }
       return data;
     },
@@ -177,6 +179,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
 
         void AppsFlyerEvents.registration(data.user.id, email);
         void TikTokEvents.registration(data.user.id, email);
+        MetaEvents.registration(data.user.id, email);
 
         // Attribute the referral now that the profile row exists and (usually) a
         // session is active. Attribution is server-side: referred_id comes from

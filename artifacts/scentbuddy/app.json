@@ -19,7 +19,15 @@
         "NSCameraUsageDescription": "ScentBuddy uses your camera to take photos of fragrance bottles so you can add them to your personal collection and identify scents.",
         "NSPhotoLibraryUsageDescription": "ScentBuddy accesses your photo library so you can select existing photos of fragrance bottles to add to your collection.",
         "NSPhotoLibraryAddUsageDescription": "ScentBuddy saves photos of fragrances to your photo library so you can keep a copy of your collection images.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "SKAdNetworkItems": [
+          {
+            "SKAdNetworkIdentifier": "v9wttpbfk9.skadnetwork"
+          },
+          {
+            "SKAdNetworkIdentifier": "n38lu8286q.skadnetwork"
+          }
+        ]
       }
     },
     "android": {
@@ -50,7 +58,25 @@
         }
       ],
       "react-native-appsflyer",
-      "./plugins/with-tiktok-modular-headers"
+      "./plugins/with-tiktok-modular-headers",
+      [
+        "react-native-fbsdk-next",
+        {
+          "appID": "1738053333886237",
+          "clientToken": "REPLACE_WITH_META_CLIENT_TOKEN",
+          "displayName": "ScentBuddy",
+          "scheme": "fb1738053333886237",
+          "advertiserIDCollectionEnabled": true,
+          "autoLogAppEventsEnabled": true,
+          "isAutoInitEnabled": false
+        }
+      ],
+      [
+        "expo-tracking-transparency",
+        {
+          "userTrackingPermission": "ScentBuddy uses your activity to measure ad performance and show you more relevant fragrance recommendations."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

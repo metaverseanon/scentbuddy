@@ -15,6 +15,7 @@ import AnimatedSplash from "@/components/AnimatedSplash";
 import WhatsNewModal from "@/components/WhatsNewModal";
 import { initAppsFlyer } from "@/lib/appsflyer";
 import { initTikTok } from "@/lib/tiktok";
+import { initMeta } from "@/lib/meta";
 import { useCaptureReferralLink } from "@/lib/referralLink";
 
 
@@ -50,6 +51,7 @@ function RootLayoutNav() {
       await SplashScreen.hideAsync();
     };
     void checkOnboarding();
+    void initMeta();
     void initAppsFlyer();
     void initTikTok();
   }, []);
