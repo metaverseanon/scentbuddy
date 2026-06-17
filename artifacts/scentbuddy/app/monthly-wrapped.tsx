@@ -211,6 +211,12 @@ export default function MonthlyWrappedScreen() {
     staleTime: Infinity,
   });
   const referralCode = referralCodeQuery.data ?? null;
+  // For a signed-in user the code resolves quickly but asynchronously; until it
+  // settles we must NOT let Save/Share capture a card with the generic join link
+  // (an unattributed share). isLoading is false for the disabled (signed-out)
+  // query and once the query settles with data OR errors, so signed-out/error
+  // cases still degrade gracefully to the generic link.
+  const referralLoading = referralCodeQuery.isLoading;
   const joinUrl = referralCode ? `${REFERRAL_SHARE_URL}?ref=${referralCode}` : REFERRAL_SHARE_URL;
   const joinUrlDisplay = joinUrl.replace(/^https?:\/\//, '');
 
@@ -664,12 +670,12 @@ export default function MonthlyWrappedScreen() {
           pointerEvents="none"
         />
         <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnGhost]}
+          style={[styles.actionBtn, styles.actionBtnGhost, referralLoading && styles.actionBtnLoading]}
           onPress={handleDownload}
-          disabled={actionState !== 'idle'}
+          disabled={actionState !== 'idle' || referralLoading}
           activeOpacity={0.85}
         >
-          {actionState === 'saving' ? (
+          {actionState === 'saving' || referralLoading ? (
             <ActivityIndicator color="#e87090" size="small" />
           ) : (
             <>
@@ -679,12 +685,12 @@ export default function MonthlyWrappedScreen() {
           )}
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnPrimary]}
+          style={[styles.actionBtn, styles.actionBtnPrimary, referralLoading && styles.actionBtnLoading]}
           onPress={handleShare}
-          disabled={actionState !== 'idle'}
+          disabled={actionState !== 'idle' || referralLoading}
           activeOpacity={0.85}
         >
-          {actionState === 'sharing' ? (
+          {actionState === 'sharing' || referralLoading ? (
             <ActivityIndicator color="#0d0510" size="small" />
           ) : (
             <>
@@ -856,4 +862,5 @@ const styles = StyleSheet.create({
   actionBtnGhostText: { color: '#e87090', fontSize: 14, fontWeight: '700' },
   actionBtnPrimary: { backgroundColor: '#e87090', flex: 1.5 },
   actionBtnPrimaryText: { color: '#0d0510', fontSize: 14, fontWeight: '800' },
+  actionBtnLoading: { opacity: 0.6 },
 });

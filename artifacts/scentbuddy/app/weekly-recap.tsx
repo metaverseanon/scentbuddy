@@ -170,6 +170,12 @@ export default function WeeklyRecapScreen() {
   });
   const referralCode = referralCodeQuery.data ?? null;
   const hasReferralCode = !!referralCode;
+  // For a signed-in user the code resolves quickly but asynchronously; until it
+  // settles we must NOT let Save/Share capture a card with the generic join link
+  // (an unattributed share). isLoading is false for the disabled (signed-out)
+  // query and once the query settles with data OR errors, so signed-out/error
+  // cases still degrade gracefully to the generic link.
+  const referralLoading = referralCodeQuery.isLoading;
   const joinUrl = referralCode ? `${REFERRAL_SHARE_URL}?ref=${referralCode}` : REFERRAL_SHARE_URL;
   const joinUrlDisplay = joinUrl.replace(/^https?:\/\//, '');
 
@@ -425,12 +431,12 @@ export default function WeeklyRecapScreen() {
 
           <View style={styles.shareActions}>
             <TouchableOpacity
-              style={styles.shareActionBtn}
+              style={[styles.shareActionBtn, referralLoading && styles.shareActionBtnLoading]}
               onPress={handleDownload}
-              disabled={actionState !== 'idle'}
+              disabled={actionState !== 'idle' || referralLoading}
               accessibilityLabel="Save recap card"
             >
-              {actionState === 'saving' ? (
+              {actionState === 'saving' || referralLoading ? (
                 <ActivityIndicator color="#0d0905" />
               ) : (
                 <>
@@ -440,12 +446,12 @@ export default function WeeklyRecapScreen() {
               )}
             </TouchableOpacity>
             <TouchableOpacity
-              style={styles.shareActionBtn}
+              style={[styles.shareActionBtn, referralLoading && styles.shareActionBtnLoading]}
               onPress={handleShare}
-              disabled={actionState !== 'idle'}
+              disabled={actionState !== 'idle' || referralLoading}
               accessibilityLabel="Share recap card"
             >
-              {actionState === 'sharing' ? (
+              {actionState === 'sharing' || referralLoading ? (
                 <ActivityIndicator color="#0d0905" />
               ) : (
                 <>
@@ -801,6 +807,7 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     borderRadius: 14,
   },
+  shareActionBtnLoading: { opacity: 0.6 },
   shareActionText: { color: '#0d0905', fontSize: 15, fontWeight: '800' },
   deeperSection: { marginTop: 4 },
   deeperHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
