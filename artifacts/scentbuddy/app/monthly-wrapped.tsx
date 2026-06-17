@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useCallback, useState } from 'react';
+import React, { useMemo, useRef, useCallback, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -20,14 +20,21 @@ import {
   ShareNetwork,
   Sparkle,
   CalendarBlank,
+  LockSimple,
+  Crown,
+  Moon,
 } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import * as MediaLibrary from 'expo-media-library';
-import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
+import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/providers/AuthProvider';
+import { useRevenueCat } from '@/providers/RevenueCatProvider';
+import { usePaywallPrompt } from '@/providers/PaywallPromptProvider';
 import { supabase } from '@/lib/supabase';
+import { logAnalyticsEvent } from '@/lib/analytics';
+import { REFERRAL_SHARE_URL, getOrCreateReferralCode } from '@/lib/referrals';
 import { CollectionItem, WearDiaryEntry, SCENT_FAMILIES } from '@/lib/types';
 import FeatureSpotlight from '@/components/FeatureSpotlight';
 import { CalendarHeart, ChartPieSlice, Drop } from 'phosphor-react-native';
@@ -46,6 +53,8 @@ function getMonthRange(offset: number = -1) {
 
 export default function MonthlyWrappedScreen() {
   const { user, profile } = useAuth();
+  const { isPro } = useRevenueCat();
+  const { openPaywall } = usePaywallPrompt();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const cardRef = useRef<View>(null);
@@ -195,6 +204,82 @@ export default function MonthlyWrappedScreen() {
     };
   }, [wears, collection, newAdditions, start, end]);
 
+  const referralCodeQuery = useQuery({
+    queryKey: ['monthly-wrapped-referral-code', user?.id],
+    queryFn: async () => (user?.id ? getOrCreateReferralCode(user.id, profile?.username ?? null) : null),
+    enabled: !!user?.id,
+    staleTime: Infinity,
+  });
+  const referralCode = referralCodeQuery.data ?? null;
+  const joinUrl = referralCode ? `${REFERRAL_SHARE_URL}?ref=${referralCode}` : REFERRAL_SHARE_URL;
+  const joinUrlDisplay = joinUrl.replace(/^https?:\/\//, '');
+
+  // Deeper, Pro-only breakdowns derived ENTIRELY from already-queried real data.
+  // Rendered below the shareable card; non-Pro users never see the real values.
+  const deeperInsights = useMemo(() => {
+    const rows: { label: string; value: string }[] = [];
+    const dayWears: Record<string, number> = {};
+    wears.forEach(w => {
+      dayWears[w.date] = (dayWears[w.date] || 0) + 1;
+    });
+    const busiest = Object.entries(dayWears).sort(([, a], [, b]) => b - a)[0];
+    if (busiest) {
+      const d = new Date(busiest[0] + 'T12:00:00');
+      rows.push({
+        label: 'Busiest day',
+        value: `${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${busiest[1]}×`,
+      });
+    }
+    if (stats.uniqueDays > 0) {
+      rows.push({ label: 'Avg wears / active day', value: (stats.totalWears / stats.uniqueDays).toFixed(1) });
+    }
+    if (stats.topThree.length > 0 && stats.totalWears > 0) {
+      const pct = Math.round((stats.topThree[0].count / stats.totalWears) * 100);
+      rows.push({ label: 'Signature share', value: `${pct}% · ${stats.topThree[0].name}` });
+    }
+    if (collection.length > 0) {
+      rows.push({ label: 'Bottles rotated', value: `${stats.uniqueFragrances} of ${collection.length}` });
+    }
+    if (stats.families.length > 0) {
+      rows.push({ label: 'Scent families explored', value: String(stats.families.length) });
+    }
+    return rows;
+  }, [wears, stats, collection]);
+
+  const hasReferralCode = !!referralCode;
+  const lockedLoggedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isPro || deeperInsights.length === 0) return;
+    if (lockedLoggedRef.current === label) return;
+    lockedLoggedRef.current = label;
+    void logAnalyticsEvent('recap_deeper_insights_locked_viewed', {
+      recap_type: 'monthly',
+      source: 'monthly_wrapped',
+      period_label: label,
+      is_pro: isPro,
+    });
+  }, [isPro, deeperInsights.length, label]);
+
+  const handleUnlockDeeper = useCallback(() => {
+    void logAnalyticsEvent('recap_deeper_insights_unlock_tapped', {
+      recap_type: 'monthly',
+      source: 'monthly_wrapped',
+      period_label: label,
+      is_pro: isPro,
+    });
+    openPaywall('monthly_wrapped_deeper_insights');
+  }, [openPaywall, label, isPro]);
+
+  const handleSeeProOverview = useCallback(() => {
+    void logAnalyticsEvent('recap_deeper_insights_pro_overview_tapped', {
+      recap_type: 'monthly',
+      source: 'monthly_wrapped',
+      period_label: label,
+      is_pro: isPro,
+    });
+    router.push({ pathname: '/pro-overview', params: { source: 'monthly_wrapped' } } as never);
+  }, [router, label, isPro]);
+
   const handleCapture = useCallback(async (): Promise<string | null> => {
     if (!cardRef.current) return null;
     try {
@@ -225,6 +310,12 @@ export default function MonthlyWrappedScreen() {
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        void logAnalyticsEvent('recap_card_saved', {
+          recap_type: 'monthly',
+          source: 'monthly_wrapped',
+          period_label: label,
+          is_pro: isPro,
+        });
         return;
       }
       const perm = await MediaLibrary.requestPermissionsAsync();
@@ -234,44 +325,59 @@ export default function MonthlyWrappedScreen() {
       }
       await MediaLibrary.saveToLibraryAsync(uri);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      void logAnalyticsEvent('recap_card_saved', {
+        recap_type: 'monthly',
+        source: 'monthly_wrapped',
+        period_label: label,
+        is_pro: isPro,
+      });
       Alert.alert('Saved!', 'Your Fragrance Wrapped was saved to your photo library.');
     } catch {
       Alert.alert('Error', 'Could not save the card. Try again.');
     } finally {
       setActionState('idle');
     }
-  }, [handleCapture, label]);
+  }, [handleCapture, label, isPro]);
 
   const handleShare = useCallback(async () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setActionState('sharing');
+    const baseProps = {
+      recap_type: 'monthly' as const,
+      source: 'monthly_wrapped' as const,
+      period_label: label,
+      is_pro: isPro,
+      total_wears: stats.totalWears,
+      unique_fragrances: stats.uniqueFragrances,
+      has_referral_code: hasReferralCode,
+    };
+    void logAnalyticsEvent('recap_share_started', baseProps);
     try {
       const uri = await handleCapture();
       if (!uri) {
+        void logAnalyticsEvent('recap_share_failed', { ...baseProps, reason: 'capture_failed' });
         Alert.alert('Oops', 'Could not capture your wrapped card. Try again.');
         return;
       }
-      const message = `My ${label} in fragrance — ${stats.totalWears} wears, ${stats.uniqueFragrances} bottles, vibe: ${stats.mood}. Get yours on ScentBuddy → scentbuddy.io`;
+      const message = `My ${label} in fragrance — ${stats.totalWears} wears, ${stats.uniqueFragrances} bottles, vibe: ${stats.mood}. Track yours on ScentBuddy → ${joinUrl}`;
       if (Platform.OS === 'web') {
         await RNShare.share({ message });
+        void logAnalyticsEvent('recap_share_completed', { ...baseProps, method: 'web' });
         return;
       }
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'image/png',
-          dialogTitle: 'Share your Fragrance Wrapped',
-          UTI: 'public.png',
-        });
-      } else {
-        await RNShare.share({ url: uri, message });
-      }
+      const shareUrl = uri.startsWith('file://') || uri.startsWith('content://') ? uri : `file://${uri}`;
+      await RNShare.share({ message, url: shareUrl });
+      void logAnalyticsEvent('recap_share_completed', {
+        ...baseProps,
+        method: 'rn_share',
+        has_image: Platform.OS === 'ios',
+      });
     } catch {
-      // ignored
+      void logAnalyticsEvent('recap_share_failed', { ...baseProps, reason: 'share_threw' });
     } finally {
       setActionState('idle');
     }
-  }, [handleCapture, label, stats]);
+  }, [handleCapture, label, stats, isPro, joinUrl, hasReferralCode]);
 
   if (wearsQuery.isLoading || collectionQuery.isLoading) {
     return (
@@ -339,7 +445,9 @@ export default function MonthlyWrappedScreen() {
         </View>
         {monthSwitcher}
         <View style={styles.empty}>
-          <Text style={styles.emptyEmoji}>🌙</Text>
+          <View style={styles.emptyIconWrap}>
+            <Moon size={40} color="#c49a6c" weight="fill" />
+          </View>
           <Text style={styles.emptyTitle}>
             {isCurrentMonth ? 'Nothing logged yet' : 'A quiet month'}
           </Text>
@@ -494,9 +602,58 @@ export default function MonthlyWrappedScreen() {
                 <Text style={styles.footerBrand}>SCENTBUDDY · {label.toUpperCase()}</Text>
                 <Text style={styles.footerCta}>Wrap yours →</Text>
               </View>
+              <Text style={styles.footerJoin}>{joinUrlDisplay}</Text>
             </View>
           </View>
         </View>
+
+        {deeperInsights.length > 0 && (
+          <View style={styles.deeperSection}>
+            <View style={styles.deeperHeader}>
+              <Text style={styles.deeperTitle}>Deeper insights</Text>
+              {!isPro && (
+                <View style={styles.deeperProTag}>
+                  <Crown size={11} color="#0d0905" weight="fill" />
+                  <Text style={styles.deeperProTagText}>PRO</Text>
+                </View>
+              )}
+            </View>
+            <View style={styles.deeperCard}>
+              {deeperInsights.map((row, i) => (
+                <View
+                  key={row.label}
+                  style={[styles.insightRow, i === deeperInsights.length - 1 && styles.insightRowLast]}
+                >
+                  <Text style={styles.insightLabel}>{row.label}</Text>
+                  <Text style={styles.insightValue} numberOfLines={1}>
+                    {isPro ? row.value : '••••••'}
+                  </Text>
+                </View>
+              ))}
+              {!isPro && (
+                <>
+                  <BlurView intensity={26} tint="dark" style={StyleSheet.absoluteFill} />
+                  <View style={styles.insightLockOverlay}>
+                    <LockSimple size={22} color="#f0ebe5" weight="fill" />
+                    <Text style={styles.insightLockText}>
+                      Unlock your full {label} breakdown with ScentBuddy Pro
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.insightUnlockBtn}
+                      onPress={handleUnlockDeeper}
+                      accessibilityLabel="Unlock deeper insights with Pro"
+                    >
+                      <Text style={styles.insightUnlockBtnText}>Unlock with Pro</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.insightSeeAllBtn} onPress={handleSeeProOverview}>
+                      <Text style={styles.insightSeeAllText}>See everything in Pro</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </View>
+        )}
       </ScrollView>
 
       <View style={[styles.actionBar, { paddingBottom: insets.bottom + 14 }]}>
@@ -553,7 +710,16 @@ const styles = StyleSheet.create({
   monthSwitcherLabel: { color: '#f0ebe5', fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
   monthSwitcherSub: { color: '#c49a6c', fontSize: 11, fontWeight: '500', marginTop: 2, letterSpacing: 0.3 },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
-  emptyEmoji: { fontSize: 48 },
+  emptyIconWrap: {
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1a0e18',
+    borderWidth: 1,
+    borderColor: '#e8709022',
+  },
   emptyTitle: { color: '#f0ebe5', fontSize: 22, fontWeight: '700', textAlign: 'center' },
   emptySubtitle: { color: '#a08a78', fontSize: 14, textAlign: 'center', lineHeight: 20 },
   cardWrapper: {
@@ -622,6 +788,59 @@ const styles = StyleSheet.create({
   footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   footerBrand: { color: '#a8809a', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 },
   footerCta: { color: '#e87090', fontSize: 11, fontWeight: '700' },
+  footerJoin: { color: '#c49a6c', fontSize: 10, fontWeight: '700', letterSpacing: 0.8, marginTop: 8 },
+  deeperSection: { marginHorizontal: 16, marginTop: 22 },
+  deeperHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  deeperTitle: { color: '#f0ebe5', fontSize: 17, fontWeight: '800', letterSpacing: 0.2 },
+  deeperProTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#c49a6c',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 100,
+  },
+  deeperProTagText: { color: '#0d0905', fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
+  deeperCard: {
+    borderRadius: 18,
+    overflow: 'hidden',
+    backgroundColor: '#14100a',
+    borderWidth: 1,
+    borderColor: '#2a2318',
+    minHeight: 150,
+  },
+  insightRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2a2318',
+    gap: 12,
+  },
+  insightRowLast: { borderBottomWidth: 0 },
+  insightLabel: { color: '#8b7a68', fontSize: 13, fontWeight: '600' },
+  insightValue: { color: '#e8d8c0', fontSize: 13, fontWeight: '700', flexShrink: 1, textAlign: 'right' },
+  insightLockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  insightLockText: { color: '#f0ebe5', fontSize: 13, fontWeight: '600', textAlign: 'center', lineHeight: 18 },
+  insightUnlockBtn: {
+    backgroundColor: '#c49a6c',
+    paddingHorizontal: 22,
+    paddingVertical: 10,
+    borderRadius: 100,
+    marginTop: 2,
+  },
+  insightUnlockBtnText: { color: '#0d0905', fontSize: 14, fontWeight: '800' },
+  insightSeeAllBtn: { marginTop: 6, paddingVertical: 4 },
+  insightSeeAllText: { color: '#c49a6c', fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' },
   actionBar: {
     position: 'absolute',
     bottom: 0,
