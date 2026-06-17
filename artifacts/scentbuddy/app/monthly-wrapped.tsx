@@ -673,6 +673,7 @@ export default function MonthlyWrappedScreen() {
           style={[styles.actionBtn, styles.actionBtnGhost, referralLoading && styles.actionBtnLoading]}
           onPress={handleDownload}
           disabled={actionState !== 'idle' || referralLoading}
+          accessibilityLabel="Save Wrapped card"
           activeOpacity={0.85}
         >
           {actionState === 'saving' || referralLoading ? (
@@ -688,6 +689,7 @@ export default function MonthlyWrappedScreen() {
           style={[styles.actionBtn, styles.actionBtnPrimary, referralLoading && styles.actionBtnLoading]}
           onPress={handleShare}
           disabled={actionState !== 'idle' || referralLoading}
+          accessibilityLabel="Share Wrapped card"
           activeOpacity={0.85}
         >
           {actionState === 'sharing' || referralLoading ? (
