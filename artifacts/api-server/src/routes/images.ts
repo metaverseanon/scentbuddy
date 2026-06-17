@@ -15,8 +15,10 @@ const CONTENT_HEIGHT_RATIO = 0.86;
 // at most this fraction of the width; if it would exceed it, we scale down so
 // it never overflows the canvas.
 const MAX_CONTENT_WIDTH_RATIO = 0.92;
-// Small gap below the bottle so its base isn't flush against the canvas edge.
-const BOTTOM_MARGIN_RATIO = 0.04;
+// No bottom margin: the bottle base sits flush against the canvas bottom edge
+// so that, when rendered bottom-aligned in the shelf, bottles visually "stand"
+// directly on the shelf line instead of floating above it.
+const BOTTOM_MARGIN_RATIO = 0;
 // Allow upscaling small/low-res bottles enough to reach a uniform height.
 // Capped to avoid extreme blur.
 const MAX_UPSCALE = 3.0;

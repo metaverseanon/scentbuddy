@@ -29,6 +29,16 @@ clean image present → free renormalize; raw-only → full pipeline. The renorm
 path must fail loudly (return null) if normalization is unavailable, not
 re-upload the same image as a false success.
 
+## Bottles must stand ON the shelf line — zero bottom margin
+The shelf line is a UI element rendered directly beneath the bottles row, and the
+bottle is composited **bottom-aligned** then rendered bottom-aligned client-side.
+So the normalized canvas must have **zero** transparent bottom margin — any
+bottom padding baked into the canvas renders as a visible gap and the bottles
+"float" above the line. **Why:** a non-zero `BOTTOM_MARGIN_RATIO` reintroduced
+exactly this float. **How to apply:** keep the bottle base flush with the canvas
+bottom edge; do not add a "small gap so the base isn't flush" margin — the shelf
+line itself provides the visual baseline.
+
 ## Rollout
 Server normalization change only takes effect in the app once the API server is
 **deployed** and `EXPO_PUBLIC_API_URL` is set; the Expo JS change ships via EAS
