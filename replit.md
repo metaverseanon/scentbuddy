@@ -83,5 +83,6 @@ Fragrance tracking and discovery app originally built with Rork, migrated to Rep
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - `pnpm --filter @workspace/api-server run dev` — run API server locally
+- `pnpm --filter @workspace/scentbuddy test` — run the Expo app's Jest component tests (jest-expo)
 
 See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details.

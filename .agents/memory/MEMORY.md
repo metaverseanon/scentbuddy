@@ -1,1 +1,2 @@
 - [RevenueCat offering identifier collisions](revenuecat-offering-identifiers.md) — package ids ($rc_annual/$rc_monthly) repeat across offerings; resolve the package from the active offering, never by identifier alone.
+- [Jest + Expo on pnpm](jest-expo-pnpm.md) — jest-expo needs a `.pnpm/`-aware transformIgnorePatterns + manual native mocks to render expo-router screens headless.
