@@ -1,15 +1,14 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { StyleSheet } from 'react-native';
 import { Crown } from 'phosphor-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 type Props = {
   size?: 'xs' | 'sm' | 'md';
-  showLabel?: boolean;
   style?: object;
 };
 
-export default function ProBadge({ size = 'sm', showLabel = true, style }: Props) {
+export default function ProBadge({ size = 'sm', style }: Props) {
   const dims = SIZES[size];
   return (
     <LinearGradient
@@ -18,33 +17,25 @@ export default function ProBadge({ size = 'sm', showLabel = true, style }: Props
       end={{ x: 1, y: 1 }}
       style={[
         styles.badge,
-        { paddingHorizontal: dims.padX, paddingVertical: dims.padY, borderRadius: dims.radius, gap: dims.gap },
+        { width: dims.box, height: dims.box, borderRadius: dims.box / 2 },
         style,
       ]}
     >
       <Crown size={dims.icon} color="#fff" weight="fill" />
-      {showLabel && (
-        <Text style={[styles.label, { fontSize: dims.font }]}>PRO</Text>
-      )}
     </LinearGradient>
   );
 }
 
 const SIZES = {
-  xs: { icon: 9, font: 9, padX: 5, padY: 2, radius: 6, gap: 3 },
-  sm: { icon: 11, font: 10, padX: 7, padY: 3, radius: 8, gap: 4 },
-  md: { icon: 13, font: 12, padX: 9, padY: 4, radius: 10, gap: 5 },
+  xs: { box: 16, icon: 10 },
+  sm: { box: 20, icon: 12 },
+  md: { box: 26, icon: 16 },
 } as const;
 
 const styles = StyleSheet.create({
   badge: {
-    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     alignSelf: 'flex-start',
-  },
-  label: {
-    color: '#fff',
-    fontWeight: '900',
-    letterSpacing: 0.6,
   },
 });

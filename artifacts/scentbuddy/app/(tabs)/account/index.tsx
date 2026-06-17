@@ -22,7 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
-import { useRevenueCat } from '@/providers/RevenueCatProvider';
+import { useRevenueCat, ENTITLEMENT_ID } from '@/providers/RevenueCatProvider';
 import { supabase } from '@/lib/supabase';
 import { ThemeName, CurrencyCode, CURRENCY_SYMBOLS } from '@/lib/types';
 import { AVATAR_EMOJIS } from '@/constants/themes';
@@ -51,6 +51,41 @@ const NOTE_CATEGORIES = [
   { family: 'Gourmand', emoji: '🍫', notes: ['Caramel', 'Coffee', 'Chocolate', 'Honey', 'Almond', 'Praline', 'Toffee'] },
   { family: 'Leather', emoji: '🪶', notes: ['Leather', 'Tobacco', 'Smoke', 'Suede'] },
 ];
+
+// Human-friendly "how long you've been Pro" label from the date the Pro
+// entitlement first became active. Returns null for invalid/future dates.
+function formatProDuration(sinceISO: string | null | undefined): string | null {
+  if (!sinceISO) return null;
+  const since = new Date(sinceISO);
+  if (Number.isNaN(since.getTime())) return null;
+  const now = new Date();
+  if (since.getTime() > now.getTime()) return null;
+
+  let months =
+    (now.getFullYear() - since.getFullYear()) * 12 + (now.getMonth() - since.getMonth());
+  if (now.getDate() < since.getDate()) months -= 1;
+
+  if (months >= 12) {
+    const years = Math.floor(months / 12);
+    const remMonths = months % 12;
+    const yPart = `${years} year${years !== 1 ? 's' : ''}`;
+    const mPart = remMonths > 0 ? ` ${remMonths} month${remMonths !== 1 ? 's' : ''}` : '';
+    return `Pro for ${yPart}${mPart}`;
+  }
+  if (months >= 1) {
+    return `Pro for ${months} month${months !== 1 ? 's' : ''}`;
+  }
+
+  const days = Math.floor((now.getTime() - since.getTime()) / (1000 * 60 * 60 * 24));
+  if (days >= 7) {
+    const weeks = Math.floor(days / 7);
+    return `Pro for ${weeks} week${weeks !== 1 ? 's' : ''}`;
+  }
+  if (days >= 1) {
+    return `Pro for ${days} day${days !== 1 ? 's' : ''}`;
+  }
+  return 'Pro since today';
+}
 
 export default function AccountScreen() {
   const { user, profile, signOut, deleteAccount, updateProfile } = useAuth();
@@ -157,6 +192,12 @@ export default function AccountScreen() {
   });
   const referralStats = referralStatsQuery.data;
 
+  const proSinceISO =
+    customerInfo?.entitlements.active[ENTITLEMENT_ID]?.originalPurchaseDate ??
+    profile?.pro_since ??
+    null;
+  const proDurationLabel = formatProDuration(proSinceISO);
+
   if (!user) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background, paddingTop: insets.top }]}>
@@ -246,7 +287,11 @@ export default function AccountScreen() {
             </View>
             <View style={styles.proInfo}>
               <Text style={[styles.proTitle, { color: colors.accent }]}>Scent Buddy Pro</Text>
-              <Text style={[styles.proSubtitle, { color: colors.subtext }]}>You have full access to all features</Text>
+              <Text style={[styles.proSubtitle, { color: colors.subtext }]}>
+                {proDurationLabel
+                  ? `${proDurationLabel} · full access to all features`
+                  : 'You have full access to all features'}
+              </Text>
             </View>
             <CaretRight size={18} color={colors.accent} />
           </TouchableOpacity>

@@ -33,7 +33,7 @@ function getRCApiKey(): string {
 }
 
 const RC_API_KEY = getRCApiKey();
-const ENTITLEMENT_ID = 'Scent Buddy Pro';
+export const ENTITLEMENT_ID = 'Scent Buddy Pro';
 // Dedicated RevenueCat offering holding the discounted win-back packages. Must be
 // configured in the RevenueCat dashboard (and the underlying app stores) for the
 // win-back offer to show real pricing; absent it, the paywall stays on standard pricing.
