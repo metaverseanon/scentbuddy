@@ -63,7 +63,7 @@
         "react-native-fbsdk-next",
         {
           "appID": "1738053333886237",
-          "clientToken": "REPLACE_WITH_META_CLIENT_TOKEN",
+          "clientToken": "1b8968415fc17b8cb9bc72412cd64dfe",
           "displayName": "ScentBuddy",
           "scheme": "fb1738053333886237",
           "advertiserIDCollectionEnabled": true,
