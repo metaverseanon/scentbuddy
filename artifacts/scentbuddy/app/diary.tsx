@@ -16,13 +16,14 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { CaretLeft, CaretRight, Plus, X, Star } from 'phosphor-react-native';
+import { CaretLeft, CaretRight, Plus, X, Star, Stack } from 'phosphor-react-native';
 import * as Haptics from 'expo-haptics';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase, forceHttps } from '@/lib/supabase';
 import { WearDiaryEntry, CollectionItem } from '@/lib/types';
+import { uuidv4 } from '@/lib/uuid';
 import { useMilestones } from '@/providers/MilestoneProvider';
 
 const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -141,8 +142,23 @@ export default function DiaryScreen() {
     else setViewMonth(viewMonth + 1);
   };
 
-  const recentWears = useMemo(() => {
-    return wears.slice(0, 10);
+  const recentWearGroups = useMemo(() => {
+    const groups: { key: string; items: WearDiaryEntry[] }[] = [];
+    const indexByGroup = new Map<string, number>();
+    for (const w of wears) {
+      if (w.layer_group_id) {
+        const existing = indexByGroup.get(w.layer_group_id);
+        if (existing !== undefined) {
+          groups[existing].items.push(w);
+          continue;
+        }
+        indexByGroup.set(w.layer_group_id, groups.length);
+        groups.push({ key: w.layer_group_id, items: [w] });
+      } else {
+        groups.push({ key: w.id, items: [w] });
+      }
+    }
+    return groups.slice(0, 10);
   }, [wears]);
 
   return (
@@ -264,34 +280,78 @@ export default function DiaryScreen() {
           </View>
         </View>
 
-        {recentWears.length > 0 && (
+        {recentWearGroups.length > 0 && (
           <View style={styles.recentSection}>
             <Text style={[styles.recentTitle, { color: colors.text }]}>Recent Wears</Text>
-            {recentWears.map(wear => {
-              const colItem = (collectionQuery.data ?? []).find(
-                c => c.perfume_name === wear.perfume_name && c.perfume_brand === wear.perfume_brand
-              );
+            {recentWearGroups.map(group => {
+              const first = group.items[0];
+              const dateLabel = new Date(first.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+              if (group.items.length === 1) {
+                const colItem = (collectionQuery.data ?? []).find(
+                  c => c.perfume_name === first.perfume_name && c.perfume_brand === first.perfume_brand
+                );
+                return (
+                  <View key={group.key} style={[styles.wearEntry, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                    {(colItem?.image_url || first.image_url) ? (
+                      <Image
+                        source={{ uri: forceHttps(colItem?.image_url || first.image_url) ?? undefined }}
+                        style={styles.wearEntryImage}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <View style={[styles.wearEntryImage, { backgroundColor: colors.chip }]} />
+                    )}
+                    <View style={styles.wearEntryInfo}>
+                      <Text style={[styles.wearEntryName, { color: colors.text }]}>{first.perfume_name}</Text>
+                      <Text style={[styles.wearEntryBrand, { color: colors.subtext }]}>{first.perfume_brand}</Text>
+                    </View>
+                    <View style={styles.wearEntryMeta}>
+                      <Text style={[styles.wearEntryDate, { color: colors.subtext }]}>{dateLabel}</Text>
+                      {first.occasion && (
+                        <Text style={[styles.wearEntryOccasion, { color: colors.accent }]}>{first.occasion}</Text>
+                      )}
+                    </View>
+                  </View>
+                );
+              }
+
               return (
-                <View key={wear.id} style={[styles.wearEntry, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                  {(colItem?.image_url || wear.image_url) ? (
-                    <Image
-                      source={{ uri: forceHttps(colItem?.image_url || wear.image_url) ?? undefined }}
-                      style={styles.wearEntryImage}
-                      resizeMode="contain"
-                    />
-                  ) : (
-                    <View style={[styles.wearEntryImage, { backgroundColor: colors.chip }]} />
-                  )}
+                <View key={group.key} style={[styles.wearEntry, styles.wearEntryLayered, { backgroundColor: colors.card, borderColor: colors.border }]}>
+                  <View style={styles.layerStack}>
+                    {group.items.slice(0, 3).map((w, i) => {
+                      const colItem = (collectionQuery.data ?? []).find(
+                        c => c.perfume_name === w.perfume_name && c.perfume_brand === w.perfume_brand
+                      );
+                      const uri = forceHttps(colItem?.image_url || w.image_url) ?? undefined;
+                      return uri ? (
+                        <Image
+                          key={w.id}
+                          source={{ uri }}
+                          style={[styles.layerStackImg, { left: i * 18, borderColor: colors.card }]}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <View
+                          key={w.id}
+                          style={[styles.layerStackImg, { left: i * 18, borderColor: colors.card, backgroundColor: colors.chip }]}
+                        />
+                      );
+                    })}
+                  </View>
                   <View style={styles.wearEntryInfo}>
-                    <Text style={[styles.wearEntryName, { color: colors.text }]}>{wear.perfume_name}</Text>
-                    <Text style={[styles.wearEntryBrand, { color: colors.subtext }]}>{wear.perfume_brand}</Text>
+                    <View style={styles.layerBadge}>
+                      <Stack size={11} color={colors.accent} weight="bold" />
+                      <Text style={[styles.layerBadgeText, { color: colors.accent }]}>Layered · {group.items.length}</Text>
+                    </View>
+                    <Text style={[styles.wearEntryName, { color: colors.text }]} numberOfLines={2}>
+                      {group.items.map(w => w.perfume_name).join(' + ')}
+                    </Text>
                   </View>
                   <View style={styles.wearEntryMeta}>
-                    <Text style={[styles.wearEntryDate, { color: colors.subtext }]}>
-                      {new Date(wear.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </Text>
-                    {wear.occasion && (
-                      <Text style={[styles.wearEntryOccasion, { color: colors.accent }]}>{wear.occasion}</Text>
+                    <Text style={[styles.wearEntryDate, { color: colors.subtext }]}>{dateLabel}</Text>
+                    {first.occasion && (
+                      <Text style={[styles.wearEntryOccasion, { color: colors.accent }]}>{first.occasion}</Text>
                     )}
                   </View>
                 </View>
@@ -319,39 +379,80 @@ function LogWearModal({ visible, onClose, userId, collection }: {
 }) {
   const { colors } = useTheme();
   const queryClient = useQueryClient();
-  const [selectedItem, setSelectedItem] = useState<CollectionItem | null>(null);
+  const [selectedItems, setSelectedItems] = useState<CollectionItem[]>([]);
   const [occasion, setOccasion] = useState('');
   const [mood, setMood] = useState('');
   const [note, setNote] = useState('');
   const [rating, setRating] = useState(0);
   const [sprays, setSprays] = useState('');
 
+  const toggleItem = useCallback((item: CollectionItem) => {
+    setSelectedItems(prev =>
+      prev.some(p => p.id === item.id)
+        ? prev.filter(p => p.id !== item.id)
+        : [...prev, item]
+    );
+  }, []);
+
   const logMutation = useMutation({
     mutationFn: async () => {
-      if (!selectedItem) throw new Error('Select a perfume');
+      if (selectedItems.length === 0) throw new Error('Select at least one perfume');
       const today = new Date().toISOString().split('T')[0];
+      const isLayered = selectedItems.length > 1;
+      const groupId = isLayered ? uuidv4() : null;
 
-      await supabase.from('wear_diary').insert({
+      // One wear_diary row per fragrance so streaks/stats/DNA keep counting
+      // every scent; layered rows share a layer_group_id so the diary can group
+      // them. layer_group_id is only sent when layered, so single-wear logging
+      // keeps working even before the layering migration is applied.
+      const rows = selectedItems.map(item => ({
         user_id: userId,
-        perfume_name: selectedItem.perfume_name,
-        perfume_brand: selectedItem.perfume_brand,
+        perfume_name: item.perfume_name,
+        perfume_brand: item.perfume_brand,
         date: today,
         note: note || null,
-        image_url: selectedItem.image_url,
+        image_url: item.image_url,
         occasion: occasion || null,
         mood: mood || null,
         rating: rating || null,
-        sprays: sprays ? parseInt(sprays) : null,
-      });
+        sprays: sprays ? parseInt(sprays, 10) : null,
+        ...(groupId ? { layer_group_id: groupId } : {}),
+      }));
 
-      await supabase.from('today_wears').insert({
-        user_id: userId,
-        perfume_name: selectedItem.perfume_name,
-        perfume_brand: selectedItem.perfume_brand,
-        image_url: selectedItem.image_url,
-        note: note || null,
-        date: today,
-      });
+      const { error: diaryError } = await supabase.from('wear_diary').insert(rows);
+      if (diaryError) throw new Error(diaryError.message);
+
+      // today_wears is one row per user per day. Use the first selected scent as
+      // the representative "wearing today"; mirror the check-then-update/insert
+      // used elsewhere so we never create duplicate rows for the same day.
+      const primary = selectedItems[0];
+      const { data: existing } = await supabase
+        .from('today_wears')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('date', today)
+        .maybeSingle();
+
+      if (existing?.id) {
+        await supabase
+          .from('today_wears')
+          .update({
+            perfume_name: primary.perfume_name,
+            perfume_brand: primary.perfume_brand,
+            image_url: primary.image_url,
+            note: note || null,
+          })
+          .eq('id', existing.id);
+      } else {
+        await supabase.from('today_wears').insert({
+          user_id: userId,
+          perfume_name: primary.perfume_name,
+          perfume_brand: primary.perfume_brand,
+          image_url: primary.image_url,
+          note: note || null,
+          date: today,
+        });
+      }
 
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
@@ -365,7 +466,7 @@ function LogWearModal({ visible, onClose, userId, collection }: {
   });
 
   const resetForm = useCallback(() => {
-    setSelectedItem(null);
+    setSelectedItems([]);
     setOccasion('');
     setMood('');
     setNote('');
@@ -387,35 +488,51 @@ function LogWearModal({ visible, onClose, userId, collection }: {
         </View>
 
         <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
-          {!selectedItem ? (
-            <>
-              <Text style={[styles.fieldLabel, { color: colors.subtext }]}>SELECT A PERFUME</Text>
-              {collection.map(item => (
+          <Text style={[styles.fieldLabel, { color: colors.subtext }]}>SELECT FRAGRANCE(S)</Text>
+          <Text style={[styles.layerHint, { color: colors.subtext }]}>
+            Pick more than one to log a layered combo.
+          </Text>
+          {collection.length === 0 ? (
+            <Text style={[styles.emptyPicker, { color: colors.subtext }]}>
+              Your collection is empty — add fragrances first.
+            </Text>
+          ) : (
+            collection.map(item => {
+              const selectedIndex = selectedItems.findIndex(p => p.id === item.id);
+              const selected = selectedIndex >= 0;
+              return (
                 <TouchableOpacity
                   key={item.id}
-                  style={[styles.selectCard, { backgroundColor: colors.card, borderColor: colors.border }]}
-                  onPress={() => setSelectedItem(item)}
+                  style={[styles.selectCard, {
+                    backgroundColor: colors.card,
+                    borderColor: selected ? colors.accent : colors.border,
+                    borderWidth: selected ? 2 : 1,
+                  }]}
+                  onPress={() => toggleItem(item)}
                 >
-                  {item.image_url && (
+                  {item.image_url ? (
                     <Image source={{ uri: forceHttps(item.image_url) ?? undefined }} style={styles.selectImage} resizeMode="contain" />
+                  ) : (
+                    <View style={[styles.selectImage, { backgroundColor: colors.chip }]} />
                   )}
                   <View style={styles.selectInfo}>
                     <Text style={[styles.selectName, { color: colors.text }]}>{item.perfume_name}</Text>
                     <Text style={[styles.selectBrand, { color: colors.subtext }]}>{item.perfume_brand}</Text>
                   </View>
+                  {selected ? (
+                    <View style={[styles.selectBadge, { backgroundColor: colors.accent }]}>
+                      <Text style={styles.selectBadgeText}>{selectedIndex + 1}</Text>
+                    </View>
+                  ) : (
+                    <View style={[styles.selectCircle, { borderColor: colors.border }]} />
+                  )}
                 </TouchableOpacity>
-              ))}
-            </>
-          ) : (
-            <>
-              <View style={[styles.selectedCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
-                <Text style={[styles.selectedName, { color: colors.text }]}>{selectedItem.perfume_name}</Text>
-                <Text style={[styles.selectedBrand, { color: colors.subtext }]}>{selectedItem.perfume_brand}</Text>
-                <TouchableOpacity onPress={() => setSelectedItem(null)}>
-                  <Text style={[styles.changeText, { color: colors.accent }]}>Change</Text>
-                </TouchableOpacity>
-              </View>
+              );
+            })
+          )}
 
+          {selectedItems.length > 0 && (
+            <>
               <Text style={[styles.fieldLabel, { color: colors.subtext }]}>OCCASION</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
                 {['Everyday', 'Office', 'Date Night', 'Evening', 'Special'].map(o => (
@@ -485,7 +602,9 @@ function LogWearModal({ visible, onClose, userId, collection }: {
                 {logMutation.isPending ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.submitBtnText}>Log Wear</Text>
+                  <Text style={styles.submitBtnText}>
+                    {selectedItems.length > 1 ? `Log Layered Combo (${selectedItems.length})` : 'Log Wear'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </>
@@ -565,4 +684,14 @@ const styles = StyleSheet.create({
   fieldInput: { borderRadius: 12, padding: 12, fontSize: 15, borderWidth: 1, marginBottom: 8 },
   submitBtn: { padding: 16, borderRadius: 14, alignItems: 'center', marginTop: 16 },
   submitBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' as const },
+  layerHint: { fontSize: 12, marginTop: -2, marginBottom: 12 },
+  emptyPicker: { fontSize: 14, marginTop: 8, marginBottom: 8 },
+  selectBadge: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  selectBadgeText: { color: '#fff', fontSize: 12, fontWeight: '800' as const },
+  selectCircle: { width: 24, height: 24, borderRadius: 12, borderWidth: 2 },
+  wearEntryLayered: { alignItems: 'flex-start' as const },
+  layerStack: { width: 84, height: 48, position: 'relative' as const },
+  layerStackImg: { width: 48, height: 48, borderRadius: 10, position: 'absolute' as const, top: 0, borderWidth: 2 },
+  layerBadge: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4, marginBottom: 4 },
+  layerBadgeText: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.3 },
 });

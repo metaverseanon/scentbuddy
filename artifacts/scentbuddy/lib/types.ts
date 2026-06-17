@@ -66,6 +66,7 @@ export interface WearDiaryEntry {
   mood: string | null;
   rating: number | null;
   sprays: number | null;
+  layer_group_id?: string | null;
   created_at: string;
 }
 
