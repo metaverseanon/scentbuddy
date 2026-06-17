@@ -3,3 +3,5 @@
 - [EAS build/submit from Replit](eas-build-from-replit.md) — run eas with EAS_NO_VCS=1 --non-interactive --no-wait; user runs `eas login` in Shell; creds live on EAS.
 - [Supabase RPC pitfalls](supabase-rpc-pitfalls.md) — RETURNS TABLE out-params share scope with columns; fully qualify every column or Postgres errors "ambiguous" and the RPC returns nothing.
 - [Attribution SDKs + ATT](attribution-sdks-att.md) — AppsFlyer/TikTok/Meta share ONE ATT prompt; fbsdk clientToken is literal app.json config; fbsdk plugin auto-injects SKAdNetwork ids; new native module → EAS rebuild.
+- [Shelf bottle normalization](shelf-bottle-normalization.md) — uniform shelf = server-side height-based + bottom-aligned image normalization; re-sizing must reuse clean images (free), never re-run removal.ai.
+- [api-server has no hot reload](api-server-no-hot-reload.md) — dev script is build-then-run (no watch); restart the workflow after editing server code or you test stale bundled code.

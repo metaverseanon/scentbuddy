@@ -6,13 +6,15 @@ const REMOVAL_AI_API_KEY = process.env.EXPO_PUBLIC_REMOVAL_AI_API_KEY || '';
 const BUCKET_NAME = 'clean-bottles';
 const MAX_RETRIES = 2;
 
-async function normalizeImage(base64: string): Promise<string> {
+// Calls the server normalizer. Returns the normalized base64, or null if
+// normalization could not be performed (API URL unset, request failed, etc.).
+async function callNormalizeApi(base64: string): Promise<string | null> {
+  const url = apiUrl('/api/images/normalize');
+  if (!url) {
+    console.log('[IMAGE-PROCESSING] API URL not configured, skipping normalization');
+    return null;
+  }
   try {
-    const url = apiUrl('/api/images/normalize');
-    if (!url) {
-      console.log('[IMAGE-PROCESSING] API URL not configured, skipping normalization');
-      return base64;
-    }
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -20,15 +22,22 @@ async function normalizeImage(base64: string): Promise<string> {
     });
     if (!response.ok) {
       console.log('[IMAGE-PROCESSING] Normalize request failed:', response.status);
-      return base64;
+      return null;
     }
     const data = await response.json() as { base64: string };
     console.log('[IMAGE-PROCESSING] Normalization complete');
-    return data.base64 || base64;
+    return data.base64 || null;
   } catch (err) {
-    console.log('[IMAGE-PROCESSING] Normalize error, using original:', err);
-    return base64;
+    console.log('[IMAGE-PROCESSING] Normalize error:', err);
+    return null;
   }
+}
+
+// Lenient wrapper for the full pipeline: if normalization is unavailable we
+// still keep the background-removed image (better than nothing).
+async function normalizeImage(base64: string): Promise<string> {
+  const normalized = await callNormalizeApi(base64);
+  return normalized ?? base64;
 }
 
 export async function fetchImageAsBase64(imageUrl: string): Promise<string | null> {
@@ -282,6 +291,59 @@ export async function processFragranceImage(
     return publicUrl;
   } catch (error) {
     console.log('[IMAGE-PROCESSING] Error in processFragranceImage:', error);
+    return null;
+  }
+}
+
+/**
+ * Re-normalize an EXISTING clean (background-removed) image so every bottle ends
+ * up the same size on the shelf. This deliberately does NOT call removal.ai —
+ * the image already has a transparent background, so we only re-run the free
+ * server-side normalization (crop-to-bottle + uniform height) and re-upload.
+ * Use this to fix bottle sizing without spending background-removal credits.
+ */
+export async function renormalizeCleanFragranceImage(
+  userId: string,
+  itemId: string,
+  cleanImageUrl: string,
+): Promise<string | null> {
+  try {
+    console.log('[IMAGE-PROCESSING] Re-normalizing clean image for item:', itemId);
+
+    const base64 = await fetchImageAsBase64(cleanImageUrl);
+    if (!base64) {
+      console.log('[IMAGE-PROCESSING] Could not fetch existing clean image');
+      return null;
+    }
+
+    // Strict: if normalization is unavailable, fail instead of re-uploading the
+    // same image as a false "success" (the bottle size wouldn't actually change).
+    const normalizedBase64 = await callNormalizeApi(base64);
+    if (!normalizedBase64) {
+      console.log('[IMAGE-PROCESSING] Normalization unavailable; skipping re-upload');
+      return null;
+    }
+
+    const publicUrl = await uploadCleanImage(userId, itemId, normalizedBase64, 'image/png');
+    if (!publicUrl) {
+      console.log('[IMAGE-PROCESSING] Re-normalize upload failed');
+      return null;
+    }
+
+    const { error } = await supabase
+      .from('user_collections')
+      .update({ clean_image_url: publicUrl })
+      .eq('id', itemId);
+
+    if (error) {
+      console.log('[IMAGE-PROCESSING] Re-normalize DB update error:', error.message);
+    } else {
+      console.log('[IMAGE-PROCESSING] Re-normalize DB updated with clean_image_url');
+    }
+
+    return publicUrl;
+  } catch (error) {
+    console.log('[IMAGE-PROCESSING] Error in renormalizeCleanFragranceImage:', error);
     return null;
   }
 }

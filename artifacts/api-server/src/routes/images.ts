@@ -6,10 +6,20 @@ const router = Router();
 
 const TARGET_W = 400;
 const TARGET_H = 600;
-const FILL_RATIO = 0.85;
 const ALPHA_THRESHOLD = 15;
-const PADDING_RATIO = 0.10;
-const MAX_UPSCALE = 1.5;
+// Every bottle is scaled so its visible HEIGHT fills this fraction of the
+// canvas. Height-based (not bounding-box-fit) scaling is what makes bottles of
+// different shapes look the same size standing on a shelf.
+const CONTENT_HEIGHT_RATIO = 0.86;
+// A wide item (e.g. a bottle photographed next to its box) is allowed to take
+// at most this fraction of the width; if it would exceed it, we scale down so
+// it never overflows the canvas.
+const MAX_CONTENT_WIDTH_RATIO = 0.92;
+// Small gap below the bottle so its base isn't flush against the canvas edge.
+const BOTTOM_MARGIN_RATIO = 0.04;
+// Allow upscaling small/low-res bottles enough to reach a uniform height.
+// Capped to avoid extreme blur.
+const MAX_UPSCALE = 3.0;
 
 async function normalizeBottleImage(base64Input: string): Promise<string> {
   const buffer = Buffer.from(base64Input, "base64");
@@ -40,31 +50,31 @@ async function normalizeBottleImage(base64Input: string): Promise<string> {
     return base64Input;
   }
 
+  // Crop tightly to the actual bottle (no padding) so we control the final
+  // height precisely.
   const bottleW = maxX - minX + 1;
   const bottleH = maxY - minY + 1;
+  src.crop({ x: minX, y: minY, w: bottleW, h: bottleH });
 
-  const padX = Math.round(bottleW * PADDING_RATIO);
-  const padY = Math.round(bottleH * PADDING_RATIO);
+  // Scale by height first; clamp by width for wide items; cap the upscale.
+  const targetContentH = TARGET_H * CONTENT_HEIGHT_RATIO;
+  const maxContentW = TARGET_W * MAX_CONTENT_WIDTH_RATIO;
+  const scale = Math.min(
+    targetContentH / bottleH,
+    maxContentW / bottleW,
+    MAX_UPSCALE,
+  );
 
-  const cropX = Math.max(0, minX - padX);
-  const cropY = Math.max(0, minY - padY);
-  const cropW = Math.min(w - cropX, bottleW + padX * 2);
-  const cropH = Math.min(h - cropY, bottleH + padY * 2);
-
-  src.crop({ x: cropX, y: cropY, w: cropW, h: cropH });
-
-  const scaleW = (TARGET_W * FILL_RATIO) / cropW;
-  const scaleH = (TARGET_H * FILL_RATIO) / cropH;
-  const scale = Math.min(scaleW, scaleH, MAX_UPSCALE);
-
-  const scaledW = Math.round(cropW * scale);
-  const scaledH = Math.round(cropH * scale);
+  const scaledW = Math.max(1, Math.round(bottleW * scale));
+  const scaledH = Math.max(1, Math.round(bottleH * scale));
 
   src.resize({ w: scaledW, h: scaledH });
 
   const canvas = new Jimp({ width: TARGET_W, height: TARGET_H, color: 0x00000000 });
+  const bottomMargin = Math.round(TARGET_H * BOTTOM_MARGIN_RATIO);
+  // Horizontally centered, bottom-aligned (bottles stand on the shelf).
   const offsetX = Math.round((TARGET_W - scaledW) / 2);
-  const offsetY = Math.round((TARGET_H - scaledH) / 2);
+  const offsetY = Math.max(0, TARGET_H - bottomMargin - scaledH);
 
   canvas.composite(src, offsetX, offsetY);
 

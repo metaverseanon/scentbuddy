@@ -15,7 +15,7 @@ import { RefreshCw } from 'lucide-react-native';
 import { CollectionItem } from '@/lib/types';
 import { forceHttps } from '@/lib/supabase';
 import { useTheme } from '@/providers/ThemeProvider';
-import { processFragranceImage } from '@/lib/image-processing';
+import { processFragranceImage, renormalizeCleanFragranceImage } from '@/lib/image-processing';
 import { useAuth } from '@/providers/AuthProvider';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -108,6 +108,7 @@ export default function ShelfView({ items, onItemPress }: ShelfViewProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [processingCount, setProcessingCount] = useState(0);
+  const [processTotal, setProcessTotal] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const horizontalPadding = 12;
@@ -132,50 +133,62 @@ export default function ShelfView({ items, onItemPress }: ShelfViewProps) {
   );
 
   const totalWithImages = useMemo(() =>
-    items.filter(item => item.image_url).length,
+    items.filter(item => item.image_url || item.clean_image_url).length,
     [items]
   );
 
   const handleProcessAll = useCallback(async (forceAll = false) => {
     if (!user?.id || isProcessing) return;
+
+    // Build the worklist. forceAll re-sizes every bottle on the shelf; otherwise
+    // we only clean bottles that have never been processed.
+    const worklist = forceAll
+      ? items.filter(item => item.image_url || item.clean_image_url)
+      : items.filter(item => item.image_url && !item.clean_image_url);
+
+    if (worklist.length === 0) return;
+
     setIsProcessing(true);
+    setProcessTotal(worklist.length);
+    setProcessingCount(0);
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-    const unprocessed = forceAll
-      ? items.filter(item => item.image_url)
-      : items.filter(item => item.image_url && !item.clean_image_url);
     let processed = 0;
-
     let failed = 0;
-    for (const item of unprocessed) {
+    for (const item of worklist) {
       try {
         console.log('[SHELF] Processing item:', item.id, item.perfume_name);
-        const result = await processFragranceImage(user.id, item.id, item.image_url!);
+        // If the bottle already has a clean (transparent) image, only re-run the
+        // free normalization — never spend background-removal credits again.
+        const result = item.clean_image_url
+          ? await renormalizeCleanFragranceImage(user.id, item.id, item.clean_image_url)
+          : await processFragranceImage(user.id, item.id, item.image_url!);
         if (result) {
           processed++;
         } else {
           failed++;
           console.log('[SHELF] Processing returned null for item:', item.id);
         }
-        setProcessingCount(processed + failed);
       } catch (error) {
         failed++;
         console.log('[SHELF] Error processing item:', item.id, error);
       }
+      setProcessingCount(processed + failed);
     }
 
     setIsProcessing(false);
     setProcessingCount(0);
+    setProcessTotal(0);
     void queryClient.invalidateQueries({ queryKey: ['collection', user.id] });
 
     if (processed > 0) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       if (failed > 0) {
-        Alert.alert('Partial Success', `Cleaned ${processed} images. ${failed} failed.`);
+        Alert.alert('Partial Success', `Updated ${processed} images. ${failed} failed.`);
       }
     } else if (failed > 0) {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Processing Failed', 'Could not remove backgrounds. Check your connection and try again.');
+      Alert.alert('Processing Failed', 'Could not update bottle images. Check your connection and try again.');
     }
   }, [user?.id, items, isProcessing, queryClient]);
 
@@ -198,14 +211,14 @@ export default function ShelfView({ items, onItemPress }: ShelfViewProps) {
               <>
                 <ActivityIndicator size="small" color={shelfColor} />
                 <Text style={[styles.processBtnText, { color: shelfColor }]}>
-                  {processingCount}/{unprocessedCount || totalWithImages}
+                  {processingCount}/{processTotal}
                 </Text>
               </>
             ) : (
               <>
                 <RefreshCw size={14} color={shelfColor} />
                 <Text style={[styles.processBtnText, { color: shelfColor }]}>
-                  {unprocessedCount > 0 ? `Clean ${unprocessedCount} images` : 'Re-clean images'}
+                  {unprocessedCount > 0 ? `Clean ${unprocessedCount} images` : 'Resize bottles'}
                 </Text>
               </>
             )}
