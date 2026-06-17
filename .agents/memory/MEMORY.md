@@ -1,3 +1,4 @@
 - [RevenueCat offering identifier collisions](revenuecat-offering-identifiers.md) — package ids ($rc_annual/$rc_monthly) repeat across offerings; resolve the package from the active offering, never by identifier alone.
 - [Jest + Expo on pnpm](jest-expo-pnpm.md) — jest-expo needs a `.pnpm/`-aware transformIgnorePatterns + manual native mocks to render expo-router screens headless.
-- [EAS build/submit from Replit](eas-build-from-replit.md) — run `eas` with `EAS_NO_VCS=1 --non-interactive --no-wait` (git writes are blocked); user does `eas login` in the Shell tab; creds live on EAS so TestFlight is one command.
+- [EAS build/submit from Replit](eas-build-from-replit.md) — run eas with EAS_NO_VCS=1 --non-interactive --no-wait; user runs `eas login` in Shell; creds live on EAS.
+- [Supabase RPC pitfalls](supabase-rpc-pitfalls.md) — RETURNS TABLE out-params share scope with columns; fully qualify every column or Postgres errors "ambiguous" and the RPC returns nothing.
