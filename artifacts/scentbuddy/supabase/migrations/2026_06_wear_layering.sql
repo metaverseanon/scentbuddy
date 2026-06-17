@@ -12,3 +12,8 @@ alter table public.wear_diary
 
 create index if not exists wear_diary_layer_group_idx
   on public.wear_diary (layer_group_id);
+
+-- Force PostgREST to refresh its schema cache so the new column is immediately
+-- visible to the app (avoids "Could not find the 'layer_group_id' column ... in
+-- the schema cache" errors right after applying this migration).
+notify pgrst, 'reload schema';
