@@ -19,6 +19,7 @@ pnpm workspace monorepo using TypeScript. Contains ScentBuddy — a React Native
 - **Auth**: Supabase (existing Supabase project)
 - **AI**: OpenAI via Replit AI Integrations (fragrance scanner + social trends)
 - **Payments**: RevenueCat (in-app subscriptions)
+- **Product analytics**: PostHog (`posthog-react-native`) — autocapture + funnel events
 - **Icons**: phosphor-react-native, lucide-react-native, @expo/vector-icons
 
 ## ScentBuddy App
@@ -65,6 +66,8 @@ Fragrance tracking and discovery app originally built with Rork, migrated to Rep
 - `EXPO_PUBLIC_SUPABASE_ANON_KEY` — your Supabase anon key
 - `EXPO_PUBLIC_REVENUECAT_API_KEY` — RevenueCat API key
 - `EXPO_PUBLIC_API_URL` — base URL for the API server
+- `EXPO_PUBLIC_POSTHOG_KEY` — PostHog project (client) API key, `phc_...` (write-only, safe in public apps)
+- `EXPO_PUBLIC_POSTHOG_HOST` — PostHog host (`https://us.i.posthog.com` US / `https://eu.i.posthog.com` EU)
 - `EXPO_PUBLIC_APPSFLYER_DEV_KEY` — AppsFlyer dev key (required for native SDK init)
 - `EXPO_PUBLIC_TIKTOK_APP_ID` — TikTok Business App ID (numeric, e.g. `7630509545810411528`)
 - `EXPO_PUBLIC_TIKTOK_ACCESS_TOKEN` — TikTok Events Manager access token (required for SDK init)
@@ -75,6 +78,7 @@ Fragrance tracking and discovery app originally built with Rork, migrated to Rep
 - AppsFlyer: native SDK only via `react-native-appsflyer` (config plugin in `app.json`). Initialized in `lib/appsflyer.ts`, fired from `app/_layout.tsx`. Events: `af_login`, `af_complete_registration`, `af_start_trial`, `af_subscribe`, `af_purchase`. Install/launch are auto-tracked by the SDK.
 - TikTok Business: native SDK via `react-native-tiktok-business-sdk` (autolinked, no plugin). Initialized in `lib/tiktok.ts`, fired from `app/_layout.tsx`. Events: `Login`, `Registration`, `StartTrial`, `Subscribe`, `PURCHASE` (content event).
 - All Supabase Edge Function tracking has been removed — events go directly through the native SDKs.
+- PostHog: JS-only `posthog-react-native` client in `lib/posthog.ts` (singleton, web/no-key safe). `lib/analytics.ts`'s `logAnalyticsEvent` mirrors every event into PostHog and identifies the signed-in user. App wrapped in `PostHogProvider` (autocapture) in `app/_layout.tsx`. Ships via EAS Update (no native rebuild).
 
 ## Key Commands
 

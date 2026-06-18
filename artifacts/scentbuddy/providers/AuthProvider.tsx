@@ -12,6 +12,7 @@ import { setPendingReferralCode } from '@/lib/referralLink';
 import { AppsFlyerEvents } from '@/lib/appsflyer';
 import { TikTokEvents } from '@/lib/tiktok';
 import { MetaEvents } from '@/lib/meta';
+import { resetPostHog } from '@/lib/posthog';
 
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const [session, setSession] = useState<Session | null>(null);
@@ -28,6 +29,7 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       setSession(s);
       if (!s) {
         queryClient.clear();
+        resetPostHog();
       }
     });
 
