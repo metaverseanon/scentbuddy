@@ -9,6 +9,12 @@ export interface FragranceProfile {
     day: number;
     night: number;
   };
+  /**
+   * True only when at least one of the supplied notes was recognized, so the
+   * season/time scores are computed from real data. When false the scores are
+   * neutral placeholders and should NOT be shown as if they were meaningful.
+   */
+  hasData: boolean;
 }
 
 interface NoteProfile {
@@ -184,6 +190,7 @@ export function analyzeFragranceProfile(
     return {
       seasons: { spring: 0.5, summer: 0.5, autumn: 0.5, winter: 0.5 },
       timeOfDay: { day: 0.5, night: 0.5 },
+      hasData: false,
     };
   }
 
@@ -198,6 +205,7 @@ export function analyzeFragranceProfile(
       day: time.day / totalWeight,
       night: time.night / totalWeight,
     },
+    hasData: true,
   };
 }
 

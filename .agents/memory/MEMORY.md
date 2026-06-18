@@ -7,3 +7,4 @@
 - [api-server has no hot reload](api-server-no-hot-reload.md) — dev script is build-then-run (no watch); restart the workflow after editing server code or you test stale bundled code.
 - [Local notification de-duplication](notifications-dedup-identifier.md) — every re-scheduled expo-notification needs a fixed identifier or it stacks into duplicates; AsyncStorage throttle isn't enough.
 - [EXPO_PUBLIC vars + EAS Update timing](expo-public-env-eas-update.md) — EXPO_PUBLIC_* are inlined at bundle time; set them in the shell BEFORE `eas update`, existing builds won't pick up new ones.
+- [Fragrance notes source](fragrance-notes-source.md) — scan AI returns only name/brand (no notes); real notes come from searchFragrances; empty notes → analyzeFragranceProfile fallback (the "50% everywhere" bug).

@@ -47,6 +47,7 @@ try {
   analyzeFragranceProfile = () => ({
     seasons: { spring: 0.5, summer: 0.5, autumn: 0.5, winter: 0.5 },
     timeOfDay: { day: 0.5, night: 0.5 },
+    hasData: false,
   });
   getSeasonSuitability = () => 'medium';
   getTimeSuitability = () => 'medium';
@@ -880,8 +881,11 @@ function DetailModal({ visible, onClose, item, onToggleFavorite, onRate, onDelet
   onUpdateFillLevel: (fill_level: number) => void;
 }) {
   const { colors } = useTheme();
+  const queryClient = useQueryClient();
   const [localFillLevel, setLocalFillLevel] = useState(item.fill_level ?? 100);
   const [localRating, setLocalRating] = useState(item.rating ?? 0);
+  const [enrichedNotes, setEnrichedNotes] = useState<{ top: string[]; heart: string[]; base: string[] } | null>(null);
+  const [enriching, setEnriching] = useState(false);
 
   useEffect(() => {
     setLocalFillLevel(item.fill_level ?? 100);
@@ -891,19 +895,76 @@ function DetailModal({ visible, onClose, item, onToggleFavorite, onRate, onDelet
     setLocalRating(item.rating ?? 0);
   }, [item.rating]);
 
+  const hasStoredNotes = (item.top_notes?.length ?? 0) > 0
+    || (item.heart_notes?.length ?? 0) > 0
+    || (item.base_notes?.length ?? 0) > 0;
+
+  // Many fragrances (especially ones added via the photo scanner) get saved with
+  // no notes, which makes the pyramid empty and the season/time profile fall back
+  // to a meaningless "50% everywhere". When notes are missing, look them up from
+  // the fragrance database by name + brand, show them, and backfill the row so the
+  // data sticks and other screens (stats, DNA) benefit too.
+  useEffect(() => {
+    if (hasStoredNotes) {
+      setEnrichedNotes(null);
+      return;
+    }
+    let cancelled = false;
+    setEnriching(true);
+    (async () => {
+      try {
+        const query = `${item.perfume_name ?? ''} ${item.perfume_brand ?? ''}`.trim();
+        const results = await searchFragrances(query, 10);
+        const lowerName = (item.perfume_name ?? '').toLowerCase().trim();
+        const lowerBrand = (item.perfume_brand ?? '').toLowerCase().trim();
+        const match =
+          results.find((r: any) =>
+            (r.name ?? '').toLowerCase().trim() === lowerName &&
+            (!lowerBrand || (r.brand ?? '').toLowerCase().trim() === lowerBrand)
+          ) ??
+          results.find((r: any) => (r.name ?? '').toLowerCase().trim() === lowerName) ??
+          results[0];
+        const top = Array.isArray(match?.topNotes) ? match.topNotes.filter(Boolean) : [];
+        const heart = Array.isArray(match?.heartNotes) ? match.heartNotes.filter(Boolean) : [];
+        const base = Array.isArray(match?.baseNotes) ? match.baseNotes.filter(Boolean) : [];
+        if (top.length === 0 && heart.length === 0 && base.length === 0) return;
+        if (cancelled) return;
+        setEnrichedNotes({ top, heart, base });
+        const { error: backfillError } = await supabase
+          .from('user_collections')
+          .update({ top_notes: top, heart_notes: heart, base_notes: base })
+          .eq('id', item.id);
+        if (backfillError) {
+          console.log('[COLLECTION] note backfill failed:', backfillError.message);
+        } else if (!cancelled) {
+          void queryClient.invalidateQueries({ queryKey: ['collection'] });
+        }
+      } catch (e) {
+        console.log('[COLLECTION] note enrichment failed:', e);
+      } finally {
+        if (!cancelled) setEnriching(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [item.id, item.perfume_name, item.perfume_brand, hasStoredNotes, queryClient]);
+
+  const topNotes = (item.top_notes?.length ?? 0) > 0 ? item.top_notes! : enrichedNotes?.top ?? [];
+  const heartNotes = (item.heart_notes?.length ?? 0) > 0 ? item.heart_notes! : enrichedNotes?.heart ?? [];
+  const baseNotes = (item.base_notes?.length ?? 0) > 0 ? item.base_notes! : enrichedNotes?.base ?? [];
+
   const allNotes = useMemo(() => [
-    ...(item.base_notes ?? []).map(n => ({ note: n, type: 'base', weight: 3 })),
-    ...(item.heart_notes ?? []).map(n => ({ note: n, type: 'heart', weight: 2 })),
-    ...(item.top_notes ?? []).map(n => ({ note: n, type: 'top', weight: 1 })),
-  ], [item.base_notes, item.heart_notes, item.top_notes]);
+    ...baseNotes.map(n => ({ note: n, type: 'base', weight: 3 })),
+    ...heartNotes.map(n => ({ note: n, type: 'heart', weight: 2 })),
+    ...topNotes.map(n => ({ note: n, type: 'top', weight: 1 })),
+  ], [baseNotes, heartNotes, topNotes]);
 
   const maxWeight = Math.max(...allNotes.map(n => n.weight), 1);
 
   const fragranceProfile = useMemo(() => analyzeFragranceProfile(
-    item.top_notes ?? [],
-    item.heart_notes ?? [],
-    item.base_notes ?? [],
-  ), [item.top_notes, item.heart_notes, item.base_notes]);
+    topNotes,
+    heartNotes,
+    baseNotes,
+  ), [topNotes, heartNotes, baseNotes]);
 
   const seasonMatch = (s: string) => {
     const key = s.toLowerCase() as keyof typeof fragranceProfile.seasons;
@@ -1052,11 +1113,18 @@ function DetailModal({ visible, onClose, item, onToggleFavorite, onRate, onDelet
             </>
           )}
 
-          {(item.top_notes?.length ?? 0) > 0 && (
+          {enriching && allNotes.length === 0 && (
+            <View style={styles.notesLoadingRow}>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={[styles.notesLoadingText, { color: colors.subtext }]}>Finding fragrance notes…</Text>
+            </View>
+          )}
+
+          {topNotes.length > 0 && (
             <>
               <Text style={[styles.noteTypeLabel, { color: colors.accent }]}>TOP NOTES</Text>
               <View style={styles.notesChipRow}>
-                {item.top_notes?.map((n, i) => (
+                {topNotes.map((n, i) => (
                   <View key={i} style={[styles.noteChip, { backgroundColor: colors.chip, borderColor: colors.border }]}>
                     <Text style={[styles.noteChipText, { color: colors.text }]}>{n}</Text>
                   </View>
@@ -1065,11 +1133,11 @@ function DetailModal({ visible, onClose, item, onToggleFavorite, onRate, onDelet
             </>
           )}
 
-          {(item.heart_notes?.length ?? 0) > 0 && (
+          {heartNotes.length > 0 && (
             <>
               <Text style={[styles.noteTypeLabel, { color: '#E91E63' }]}>HEART NOTES</Text>
               <View style={styles.notesChipRow}>
-                {item.heart_notes?.map((n, i) => (
+                {heartNotes.map((n, i) => (
                   <View key={i} style={[styles.noteChip, { backgroundColor: colors.chip, borderColor: colors.border }]}>
                     <Text style={[styles.noteChipText, { color: colors.text }]}>{n}</Text>
                   </View>
@@ -1078,11 +1146,11 @@ function DetailModal({ visible, onClose, item, onToggleFavorite, onRate, onDelet
             </>
           )}
 
-          {(item.base_notes?.length ?? 0) > 0 && (
+          {baseNotes.length > 0 && (
             <>
               <Text style={[styles.noteTypeLabel, { color: '#9B59B6' }]}>BASE NOTES</Text>
               <View style={styles.notesChipRow}>
-                {item.base_notes?.map((n, i) => (
+                {baseNotes.map((n, i) => (
                   <View key={i} style={[styles.noteChip, { backgroundColor: colors.chip, borderColor: colors.border }]}>
                     <Text style={[styles.noteChipText, { color: colors.text }]}>{n}</Text>
                   </View>
@@ -1091,6 +1159,8 @@ function DetailModal({ visible, onClose, item, onToggleFavorite, onRate, onDelet
             </>
           )}
 
+          {fragranceProfile.hasData && (
+          <>
           <Text style={[styles.detailSectionTitle, { color: colors.text }]}>BEST TIME</Text>
           <View style={styles.timeRow}>
             <View style={[styles.timeCard, { backgroundColor: dayHigh ? '#FFF8E1' : dayHighOrMedium ? '#FFFDE7' : colors.chip, borderColor: dayHigh ? '#FFC107' : dayHighOrMedium ? '#FFD54F' : colors.border, opacity: dayHighOrMedium ? 1 : 0.45 }]}>
@@ -1126,6 +1196,8 @@ function DetailModal({ visible, onClose, item, onToggleFavorite, onRate, onDelet
               </View>
             ))}
           </View>
+          </>
+          )}
 
           {item.personal_notes ? (
             <>
@@ -1428,6 +1500,8 @@ const styles = StyleSheet.create({
   noteTypeLabel: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 1, marginTop: 12, marginBottom: 8 },
   notesChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   noteChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1 },
+  notesLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 16 },
+  notesLoadingText: { fontSize: 14 },
   noteChipText: { fontSize: 13 },
   timeRow: { flexDirection: 'row', gap: 10, marginBottom: 8 },
   timeCard: { flex: 1, borderRadius: 14, padding: 14, alignItems: 'center', borderWidth: 1 },
