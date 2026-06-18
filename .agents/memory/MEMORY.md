@@ -5,3 +5,4 @@
 - [Attribution SDKs + ATT](attribution-sdks-att.md) — AppsFlyer/TikTok/Meta share ONE ATT prompt; fbsdk clientToken is literal app.json config; fbsdk plugin auto-injects SKAdNetwork ids; new native module → EAS rebuild.
 - [Shelf bottle normalization](shelf-bottle-normalization.md) — uniform shelf = server-side height-based + bottom-aligned image normalization; re-sizing must reuse clean images (free), never re-run removal.ai.
 - [api-server has no hot reload](api-server-no-hot-reload.md) — dev script is build-then-run (no watch); restart the workflow after editing server code or you test stale bundled code.
+- [Local notification de-duplication](notifications-dedup-identifier.md) — every re-scheduled expo-notification needs a fixed identifier or it stacks into duplicates; AsyncStorage throttle isn't enough.

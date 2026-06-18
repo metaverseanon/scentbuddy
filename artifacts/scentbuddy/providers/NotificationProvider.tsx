@@ -16,6 +16,14 @@ const PUSH_TOKEN_KEY = 'scentbuddy_push_token';
 const MILESTONE_CHECK_KEY = 'scentbuddy_last_milestone_count';
 const GOAL_CHECK_KEY = 'scentbuddy_last_goal_check';
 const QUIZ_FOLLOWUP_KEY = 'scentbuddy_last_quiz_followup';
+// Fixed notification identifiers so re-scheduling REPLACES the pending reminder
+// instead of stacking a second one (which caused duplicate notifications).
+const GOAL_REMINDER_ID = 'goal-progress-reminder';
+const QUIZ_FOLLOWUP_ID = 'quiz-followup-reminder';
+// One-time cleanup flag: cancels legacy goal/quiz reminders that were scheduled
+// (before stable identifiers existed) with auto-generated ids and could still
+// fire as duplicates.
+const STALE_REMINDER_CLEANUP_KEY = 'scentbuddy_stale_reminder_cleanup_v1';
 
 export interface NotificationSettings {
   sniffAlerts: boolean;
@@ -432,6 +440,7 @@ async function checkAndSendGoalReminder(userId: string) {
     }
 
     await Notifications.scheduleNotificationAsync({
+      identifier: GOAL_REMINDER_ID,
       content: {
         title: 'Goal Progress \uD83C\uDFAF',
         body: `Keep working on "${randomGoal.label}" \u2014 you're getting closer to your target of ${randomGoal.target}!`,
@@ -518,6 +527,7 @@ async function checkAndSendQuizFollowUp(userId: string) {
     }
 
     await Notifications.scheduleNotificationAsync({
+      identifier: QUIZ_FOLLOWUP_ID,
       content: {
         title: 'Based on Your Scent Profile \uD83D\uDC43',
         body: `You love ${family} scents! Explore new additions that match your taste in the community.`,
@@ -533,6 +543,33 @@ async function checkAndSendQuizFollowUp(userId: string) {
     console.log('[PUSH] Quiz follow-up notification scheduled for family:', family, 'at', fireDate.toISOString());
   } catch (err) {
     console.log('[PUSH] Error sending quiz follow-up:', err);
+  }
+}
+
+// Removes legacy goal/quiz reminders scheduled before stable identifiers were
+// introduced. Those used auto-generated ids, so the new fixed identifier can't
+// replace them and they could still fire as duplicates. Runs once per install.
+async function cleanupStaleStackedReminders() {
+  if (Platform.OS === 'web' || !Notifications) return;
+  try {
+    const done = await AsyncStorage.getItem(STALE_REMINDER_CLEANUP_KEY);
+    if (done) return;
+
+    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+    for (const n of scheduled) {
+      const type = n.content?.data?.type;
+      const id = n.identifier;
+      const isStaleGoal = type === 'goal_reminder' && id !== GOAL_REMINDER_ID;
+      const isStaleQuiz = type === 'quiz_followup' && id !== QUIZ_FOLLOWUP_ID;
+      if (isStaleGoal || isStaleQuiz) {
+        await Notifications.cancelScheduledNotificationAsync(id);
+        console.log('[PUSH] Cancelled stale stacked reminder:', type, id);
+      }
+    }
+
+    await AsyncStorage.setItem(STALE_REMINDER_CLEANUP_KEY, Date.now().toString());
+  } catch (err) {
+    console.log('[PUSH] Error cleaning up stale reminders:', err);
   }
 }
 
@@ -617,6 +654,8 @@ export const [NotificationProvider, useNotifications] = createContextHook(() => 
     const setup = async () => {
       try {
         console.log('[PUSH] Starting setup for user:', user.id);
+        await cleanupStaleStackedReminders();
+        if (cancelled) return;
         const token = await registerForPushNotificationsAsync();
         if (cancelled) return;
         console.log('[PUSH] Registration result:', token ? 'got token' : 'no token');
