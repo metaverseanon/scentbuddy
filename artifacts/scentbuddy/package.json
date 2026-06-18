@@ -83,6 +83,7 @@
     "expo-tracking-transparency": "~6.0.8",
     "expo-updates": "~29.0.17",
     "lucide-react-native": "^1.11.0",
+    "posthog-react-native": "^4.49.1",
     "react-native-appsflyer": "^6.17.9",
     "react-native-fbsdk-next": "^13.4.3",
     "react-native-tiktok-business-sdk": "1.6.0"

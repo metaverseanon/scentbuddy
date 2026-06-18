@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { PostHogProvider } from "posthog-react-native";
+import { getPostHog } from "@/lib/posthog";
 import { AuthProvider } from "@/providers/AuthProvider";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import { NotificationProvider } from "@/providers/NotificationProvider";
@@ -110,10 +112,23 @@ function RootLayoutNav() {
   );
 }
 
+// Wraps the app in PostHog for product analytics + autocapture. When no key is
+// configured (or on web) it renders children directly, so the app still works.
+function AnalyticsProvider({ children }: { children: React.ReactNode }) {
+  const client = useMemo(() => getPostHog(), []);
+  if (!client) return <>{children}</>;
+  return (
+    <PostHogProvider client={client} autocapture>
+      {children}
+    </PostHogProvider>
+  );
+}
+
 export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <GestureHandlerRootView style={{ flex: 1 }}>
+        <AnalyticsProvider>
         <ThemeProvider>
           <AuthProvider>
             <RevenueCatProvider>
@@ -127,6 +142,7 @@ export default function RootLayout() {
             </RevenueCatProvider>
           </AuthProvider>
         </ThemeProvider>
+        </AnalyticsProvider>
       </GestureHandlerRootView>
     </QueryClientProvider>
   );
