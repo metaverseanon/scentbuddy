@@ -42,7 +42,7 @@ export default function CommunityScreen() {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<CommunityTab>('leaderboard');
-  const [leaderboardCategory, setLeaderboardCategory] = useState<'sniffs' | 'collection'>('collection');
+  const [leaderboardCategory, setLeaderboardCategory] = useState<'sniffs' | 'collection' | 'streak'>('collection');
   const [showNotifications, setShowNotifications] = useState(false);
   const [showWearPicker, setShowWearPicker] = useState(false);
   const [showChallengePicker, setShowChallengePicker] = useState(false);
@@ -268,6 +268,18 @@ export default function CommunityScreen() {
         .slice(0, 10);
       return sorted;
     },
+  });
+
+  const streakLeaderboardQuery = useQuery({
+    queryKey: ['streak-leaderboard'],
+    queryFn: async () => {
+      const { data, error } = await supabase.rpc('get_streak_leaderboard', { limit_count: 10 });
+      if (error) throw error;
+      return ((data ?? []) as { user_id: string; streak: number }[])
+        .map((row) => [row.user_id, row.streak] as [string, number]);
+    },
+    enabled: activeTab === 'leaderboard' && leaderboardCategory === 'streak',
+    staleTime: 1000 * 60 * 5,
   });
 
   const socialTrendingSchema = z.object({
@@ -1260,6 +1272,8 @@ export default function CommunityScreen() {
     let entries: [string, number][] = [];
     if (leaderboardCategory === 'sniffs') {
       entries = leaderboardQuery.data ?? [];
+    } else if (leaderboardCategory === 'streak') {
+      entries = streakLeaderboardQuery.data ?? [];
     } else {
       const counts: Record<string, number> = {};
       (allCollectionsAggQuery.data ?? []).forEach((row) => {
@@ -1268,19 +1282,35 @@ export default function CommunityScreen() {
       entries = Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, 10);
     }
 
-    const headerTitle = leaderboardCategory === 'sniffs' ? 'Sniff Leaderboard' : 'Biggest Collections';
+    const headerTitle = leaderboardCategory === 'sniffs'
+      ? 'Sniff Leaderboard'
+      : leaderboardCategory === 'streak'
+        ? 'Log Streaks'
+        : 'Biggest Collections';
     const headerSub = leaderboardCategory === 'sniffs'
       ? 'Who has the most admired collection?'
-      : 'Top collectors by number of bottles';
-    const scoreLabel = leaderboardCategory === 'sniffs' ? 'sniffs' : 'bottles';
+      : leaderboardCategory === 'streak'
+        ? 'Longest current daily logging streaks'
+        : 'Top collectors by number of bottles';
+    const scoreLabel = leaderboardCategory === 'sniffs'
+      ? 'sniffs'
+      : leaderboardCategory === 'streak'
+        ? 'day streak'
+        : 'bottles';
     const emptyText = leaderboardCategory === 'sniffs'
       ? 'No sniffs yet — explore collections!'
-      : 'No collections yet — be the first!';
+      : leaderboardCategory === 'streak'
+        ? 'No active streaks yet — log a scent today!'
+        : 'No collections yet — be the first!';
 
     return (
       <>
         <View style={[styles.leaderboardHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          <Trophy size={36} color={colors.accent} weight="fill" />
+          {leaderboardCategory === 'streak' ? (
+            <Flame size={36} color={colors.accent} weight="fill" />
+          ) : (
+            <Trophy size={36} color={colors.accent} weight="fill" />
+          )}
           <Text style={[styles.leaderboardTitle, { color: colors.text }]}>{headerTitle}</Text>
           <Text style={[styles.leaderboardSub, { color: colors.subtext }]}>{headerSub}</Text>
         </View>
@@ -1289,6 +1319,7 @@ export default function CommunityScreen() {
           {([
             { key: 'sniffs' as const, label: 'Most Admired' },
             { key: 'collection' as const, label: 'Biggest Collection' },
+            { key: 'streak' as const, label: 'Log Streaks' },
           ]).map((cat) => {
             const isActive = leaderboardCategory === cat.key;
             return (
@@ -1305,6 +1336,8 @@ export default function CommunityScreen() {
                 activeOpacity={0.8}
               >
                 <Text
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
                   style={[
                     styles.leaderCategoryText,
                     { color: isActive ? '#fff' : colors.text },

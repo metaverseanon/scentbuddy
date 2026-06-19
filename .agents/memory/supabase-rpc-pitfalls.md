@@ -28,3 +28,19 @@ surface.
 **How to apply:** whenever editing or adding a SECURITY DEFINER `returns table`
 RPC (twin matches, blind test, future RPCs), qualify columns and never leave a
 body reference whose bare name equals an out-param.
+
+# SECURITY DEFINER functions are PUBLIC-executable by default
+
+A freshly created function grants `EXECUTE` to `PUBLIC`, so a `SECURITY DEFINER`
+RPC that reads owner-scoped (RLS-private) data — e.g. `get_streak_leaderboard`
+over `wear_diary` — is callable by `anon` unless you lock it down.
+
+**Rule:** for any SECURITY DEFINER RPC that bypasses RLS, add
+`revoke execute on function public.fn(args) from public;` then
+`grant execute ... to authenticated;`. Also clamp any caller-supplied `limit`
+(`limit least(greatest(coalesce(n,10),1),100)`) so it can't request unbounded
+or negative output.
+
+**Why:** a SECURITY DEFINER function reads with the definer's (elevated)
+privileges; the only access boundary left is the EXECUTE grant, and the default
+PUBLIC grant defeats the intended authenticated-only boundary.
