@@ -14,6 +14,133 @@ import { TikTokEvents } from '@/lib/tiktok';
 import { MetaEvents } from '@/lib/meta';
 import { resetPostHog } from '@/lib/posthog';
 
+// Provision a brand-new user's profile + onboarding side effects. Shared by the
+// email/password sign-up flow and the "Sign in with Apple" first-time flow so
+// both create the same profile shape, sync the onboarding quiz + starter
+// collection, fire registration analytics, and attribute any pending referral.
+async function provisionNewUser(params: {
+  userId: string;
+  email: string;
+  username: string;
+  displayName: string;
+}): Promise<void> {
+  const { userId, email, username, displayName } = params;
+
+  let quizResults: QuizResults | null = null;
+  try {
+    const stored = await AsyncStorage.getItem(ONBOARDING_QUIZ_KEY);
+    if (stored) {
+      quizResults = JSON.parse(stored) as QuizResults;
+      console.log('Found onboarding quiz results for new user:', quizResults);
+    }
+  } catch (e) {
+    console.log('Failed to read quiz results:', e);
+  }
+
+  const newReferralCode = generateReferralCode(username, userId);
+
+  const profileData: Record<string, unknown> = {
+    id: userId,
+    email,
+    username,
+    display_name: displayName || username,
+    avatar_emoji: '🧴',
+    is_pro: false,
+    referral_code: newReferralCode,
+    created_at: new Date().toISOString(),
+  };
+
+  if (quizResults) {
+    profileData.favorite_note = quizResults.favoriteNotes?.[0] ?? null;
+    profileData.scent_quiz = quizResults;
+  }
+
+  const { error: upsertError } = await supabase.from('profiles').upsert(profileData);
+  if (upsertError) {
+    console.log('[Auth] Profile upsert failed (likely RLS pre-confirmation), trigger should have set basics:', upsertError.message);
+  }
+
+  if (quizResults) {
+    try {
+      await AsyncStorage.removeItem(ONBOARDING_QUIZ_KEY);
+      console.log('Cleared onboarding quiz data after account creation');
+    } catch (e) {
+      console.log('Failed to clear quiz data:', e);
+    }
+  }
+
+  try {
+    const starterRaw = await AsyncStorage.getItem(STARTER_COLLECTION_KEY);
+    if (starterRaw) {
+      const picks = JSON.parse(starterRaw) as StarterPick[];
+      if (Array.isArray(picks) && picks.length > 0) {
+        const rows = picks
+          .filter(p => p && p.name)
+          .map(p => ({
+            user_id: userId,
+            perfume_name: p.name,
+            perfume_brand: p.brand ?? '',
+            concentration: p.concentration ?? null,
+            top_notes: p.topNotes ?? [],
+            heart_notes: p.heartNotes ?? [],
+            base_notes: p.baseNotes ?? [],
+            image_url: p.imageUrl ?? null,
+            is_favorite: false,
+            date_added: new Date().toISOString(),
+            status: 'owned',
+            fill_level: 100,
+          }));
+        if (rows.length > 0) {
+          const { error: starterError } = await supabase.from('user_collections').insert(rows);
+          if (starterError) {
+            console.log('[Auth] Starter collection insert failed, keeping picks for retry:', starterError.message);
+          } else {
+            console.log('[Auth] Synced starter collection:', rows.length);
+            await AsyncStorage.removeItem(STARTER_COLLECTION_KEY);
+          }
+        } else {
+          await AsyncStorage.removeItem(STARTER_COLLECTION_KEY);
+        }
+      } else {
+        await AsyncStorage.removeItem(STARTER_COLLECTION_KEY);
+      }
+    }
+  } catch (e) {
+    console.log('Failed to sync starter collection:', e);
+  }
+
+  void AppsFlyerEvents.registration(userId, email);
+  void TikTokEvents.registration(userId, email);
+  MetaEvents.registration(userId, email);
+
+  // Attribute the referral now that the profile row exists and (usually) a
+  // session is active. Attribution is server-side: referred_id comes from the
+  // JWT, never the body. If there's no session yet, this no-ops and the consume
+  // effect retries after sign-in.
+  await consumePendingReferral();
+}
+
+// Apple only returns the user's name/email on the FIRST sign-in, so new Apple
+// users need an auto-generated unique username. Best-effort uniqueness check.
+function sanitizeUsername(raw: string): string {
+  return raw.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 12);
+}
+
+async function generateUniqueUsername(seed: string): Promise<string> {
+  const base = sanitizeUsername(seed) || 'scent';
+  for (let i = 0; i < 5; i++) {
+    const suffix = Math.random().toString(36).slice(2, 6);
+    const candidate = `${base}_${suffix}`;
+    const { data } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', candidate)
+      .maybeSingle();
+    if (!data) return candidate;
+  }
+  return `scent_${Date.now().toString(36)}`;
+}
+
 export const [AuthProvider, useAuth] = createContextHook(() => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,99 +222,85 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
       });
       if (error) throw error;
       if (data.user) {
-        let quizResults: QuizResults | null = null;
-        try {
-          const stored = await AsyncStorage.getItem(ONBOARDING_QUIZ_KEY);
-          if (stored) {
-            quizResults = JSON.parse(stored) as QuizResults;
-            console.log('Found onboarding quiz results for new user:', quizResults);
-          }
-        } catch (e) {
-          console.log('Failed to read quiz results:', e);
-        }
-
-        const newReferralCode = generateReferralCode(username, data.user.id);
-
-        const profileData: Record<string, unknown> = {
-          id: data.user.id,
+        await provisionNewUser({
+          userId: data.user.id,
           email,
           username,
-          display_name: displayName || username,
-          avatar_emoji: '🧴',
-          is_pro: false,
-          referral_code: newReferralCode,
-          created_at: new Date().toISOString(),
-        };
+          displayName,
+        });
+      }
+      return data;
+    },
+  });
 
-        if (quizResults) {
-          profileData.favorite_note = quizResults.favoriteNotes?.[0] ?? null;
-          profileData.scent_quiz = quizResults;
-        }
+  // "Sign in with Apple" (native iOS). Exchanges Apple's identity token for a
+  // Supabase session via signInWithIdToken, then provisions a profile the first
+  // time (Apple only returns name/email on the first authorization).
+  const signInWithAppleMutation = useMutation({
+    mutationFn: async () => {
+      const AppleAuthentication = await import('expo-apple-authentication');
+      const Crypto = await import('expo-crypto');
 
-        const { error: upsertError } = await supabase.from('profiles').upsert(profileData);
-        if (upsertError) {
-          console.log('[Auth] Profile upsert failed (likely RLS pre-confirmation), trigger should have set basics:', upsertError.message);
-        }
+      // Nonce binding (replay protection): send the SHA-256 hash of a random raw
+      // nonce to Apple (it lands in the token's `nonce` claim), and hand the RAW
+      // nonce to Supabase, which re-hashes and compares against the claim.
+      const rawNonce = Crypto.randomUUID() + Crypto.randomUUID();
+      const hashedNonce = await Crypto.digestStringAsync(
+        Crypto.CryptoDigestAlgorithm.SHA256,
+        rawNonce,
+      );
 
-        if (quizResults) {
-          try {
-            await AsyncStorage.removeItem(ONBOARDING_QUIZ_KEY);
-            console.log('Cleared onboarding quiz data after account creation');
-          } catch (e) {
-            console.log('Failed to clear quiz data:', e);
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+        nonce: hashedNonce,
+      });
+      if (!credential.identityToken) {
+        throw new Error('Apple did not return an identity token. Please try again.');
+      }
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'apple',
+        token: credential.identityToken,
+        nonce: rawNonce,
+      });
+      if (error) throw error;
+
+      const user = data.user;
+      if (user) {
+        const { data: existingProfile, error: lookupError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        // On a lookup error we deliberately do NOT provision: re-running
+        // provisionNewUser would upsert over an existing profile and reset
+        // username/referral_code/is_pro. Skipping is the safe failure mode — a
+        // genuinely new user simply gets provisioned on their next sign-in.
+        if (existingProfile || lookupError) {
+          if (lookupError) {
+            console.log('[Auth] Apple profile lookup failed, skipping provisioning:', lookupError.message);
           }
+          void AppsFlyerEvents.login(user.id, user.email ?? '');
+          void TikTokEvents.login(user.id, user.email ?? '');
+          MetaEvents.login(user.id, user.email ?? '');
+        } else {
+          const fullName = credential.fullName;
+          const displayName =
+            [fullName?.givenName, fullName?.familyName].filter(Boolean).join(' ').trim() ||
+            (user.email ? user.email.split('@')[0] : 'Scent Lover');
+          const username = await generateUniqueUsername(
+            fullName?.givenName || (user.email ? user.email.split('@')[0] : 'scent'),
+          );
+          await provisionNewUser({
+            userId: user.id,
+            email: user.email ?? '',
+            username,
+            displayName,
+          });
         }
-
-        try {
-          const starterRaw = await AsyncStorage.getItem(STARTER_COLLECTION_KEY);
-          if (starterRaw) {
-            const picks = JSON.parse(starterRaw) as StarterPick[];
-            if (Array.isArray(picks) && picks.length > 0) {
-              const rows = picks
-                .filter(p => p && p.name)
-                .map(p => ({
-                  user_id: data.user!.id,
-                  perfume_name: p.name,
-                  perfume_brand: p.brand ?? '',
-                  concentration: p.concentration ?? null,
-                  top_notes: p.topNotes ?? [],
-                  heart_notes: p.heartNotes ?? [],
-                  base_notes: p.baseNotes ?? [],
-                  image_url: p.imageUrl ?? null,
-                  is_favorite: false,
-                  date_added: new Date().toISOString(),
-                  status: 'owned',
-                  fill_level: 100,
-                }));
-              if (rows.length > 0) {
-                const { error: starterError } = await supabase.from('user_collections').insert(rows);
-                if (starterError) {
-                  // Preserve the key so picks can be retried once the session/RLS is ready.
-                  console.log('[Auth] Starter collection insert failed, keeping picks for retry:', starterError.message);
-                } else {
-                  console.log('[Auth] Synced starter collection:', rows.length);
-                  await AsyncStorage.removeItem(STARTER_COLLECTION_KEY);
-                }
-              } else {
-                await AsyncStorage.removeItem(STARTER_COLLECTION_KEY);
-              }
-            } else {
-              await AsyncStorage.removeItem(STARTER_COLLECTION_KEY);
-            }
-          }
-        } catch (e) {
-          console.log('Failed to sync starter collection:', e);
-        }
-
-        void AppsFlyerEvents.registration(data.user.id, email);
-        void TikTokEvents.registration(data.user.id, email);
-        MetaEvents.registration(data.user.id, email);
-
-        // Attribute the referral now that the profile row exists and (usually) a
-        // session is active. Attribution is server-side: referred_id comes from
-        // the JWT, never the body. If there's no session yet (email confirmation
-        // required), this no-ops and the consume effect retries after sign-in.
-        await consumePendingReferral();
       }
       return data;
     },
@@ -286,13 +399,16 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     profileLoading: profileQuery.isLoading,
     signIn: signInMutation.mutateAsync,
     signUp: signUpMutation.mutateAsync,
+    signInWithApple: signInWithAppleMutation.mutateAsync,
     signOut,
     deleteAccount,
     updateProfile,
     signInLoading: signInMutation.isPending,
     signUpLoading: signUpMutation.isPending,
+    signInWithAppleLoading: signInWithAppleMutation.isPending,
     signInError: signInMutation.error?.message ?? null,
     signUpError: signUpMutation.error?.message ?? null,
+    signInWithAppleError: signInWithAppleMutation.error?.message ?? null,
   }), [
     session,
     profileQuery.data,
@@ -304,6 +420,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     signUpMutation.mutateAsync,
     signUpMutation.isPending,
     signUpMutation.error,
+    signInWithAppleMutation.mutateAsync,
+    signInWithAppleMutation.isPending,
+    signInWithAppleMutation.error,
     signOut,
     deleteAccount,
     updateProfile,

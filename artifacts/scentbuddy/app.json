@@ -15,6 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.rork.0kxdwz3d5g57j5m9vjhxs",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "NSCameraUsageDescription": "ScentBuddy uses your camera to take photos of fragrance bottles so you can add them to your personal collection and identify scents.",
         "NSPhotoLibraryUsageDescription": "ScentBuddy accesses your photo library so you can select existing photos of fragrance bottles to add to your collection.",

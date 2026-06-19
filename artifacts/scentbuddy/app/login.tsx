@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Eye, EyeSlash, Check, X, WarningCircle } from 'phosphor-react-native';
+import { Eye, EyeSlash, Check, X, WarningCircle, AppleLogo } from 'phosphor-react-native';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { supabase } from '@/lib/supabase';
@@ -56,7 +56,7 @@ export default function LoginScreen() {
   const formSlide = useRef(new Animated.Value(60)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
 
-  const { signIn, signUp, signInLoading, signUpLoading } = useAuth();
+  const { signIn, signUp, signInWithApple, signInLoading, signUpLoading, signInWithAppleLoading } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -194,6 +194,16 @@ export default function LoginScreen() {
       router.replace('/(tabs)/(home)' as any);
     } catch (err: any) {
       Alert.alert('Error', err?.message || 'Something went wrong');
+    }
+  };
+
+  const handleAppleSignIn = async () => {
+    try {
+      await signInWithApple();
+      router.replace('/(tabs)/(home)' as any);
+    } catch (err: any) {
+      if (err?.code === 'ERR_REQUEST_CANCELED') return;
+      Alert.alert('Error', err?.message || 'Apple sign-in failed');
     }
   };
 
@@ -485,6 +495,32 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
 
+            {Platform.OS === 'ios' && (
+              <>
+                <View style={styles.dividerRow}>
+                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                  <Text style={[styles.dividerText, { color: colors.subtext }]}>or</Text>
+                  <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
+                </View>
+                <TouchableOpacity
+                  style={[styles.appleBtn, (isLoading || signInWithAppleLoading) && { opacity: 0.6 }]}
+                  onPress={handleAppleSignIn}
+                  disabled={isLoading || signInWithAppleLoading}
+                  activeOpacity={0.8}
+                  testID="apple-signin-button"
+                >
+                  {signInWithAppleLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <AppleLogo size={20} color="#fff" weight="fill" />
+                      <Text style={styles.appleBtnText}>Sign in with Apple</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </>
+            )}
+
             {!isSignUp && (
               <TouchableOpacity
                 onPress={() => {
@@ -663,6 +699,36 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 17,
     fontWeight: '700' as const,
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 18,
+    marginBottom: 4,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+  },
+  dividerText: {
+    marginHorizontal: 12,
+    fontSize: 13,
+    fontWeight: '500' as const,
+  },
+  appleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#000',
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 12,
+  },
+  appleBtnText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600' as const,
   },
   forgotBtn: {
     marginTop: 12,
