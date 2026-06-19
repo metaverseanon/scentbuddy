@@ -6,3 +6,9 @@ id = "FKNBTC-ZqXqAJEGKqRiT8"
 uri = "file://screenshots/paywall-weekly-full.jpg"
 type = "image"
 title = "ScentBuddy Paywall — All 3 Plans (Yearly / Monthly / Weekly)"
+
+[[outputs]]
+id = "Q_TI1BlMew3JqYLBk9a8T"
+uri = "file://artifacts/scentbuddy/screenshots/paywall-weekly-review.jpg"
+type = "image"
+title = "Paywall — all 3 plans (App Review screenshot, 760×1100)"
