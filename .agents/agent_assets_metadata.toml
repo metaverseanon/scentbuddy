@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "FKNBTC-ZqXqAJEGKqRiT8"
+uri = "file://screenshots/paywall-weekly-full.jpg"
+type = "image"
+title = "ScentBuddy Paywall — All 3 Plans (Yearly / Monthly / Weekly)"
