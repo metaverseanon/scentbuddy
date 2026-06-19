@@ -60,6 +60,7 @@
       ],
       "react-native-appsflyer",
       "./plugins/with-tiktok-modular-headers",
+      "./plugins/with-google-modular-headers",
       [
         "react-native-fbsdk-next",
         {
