@@ -26,3 +26,14 @@ Interactive `eas login` (password/2FA) must be done by the user in the **Shell t
 - `production` profile: store distribution, `autoIncrement` build number, channel `production`.
 - `--auto-submit` queues the App Store Connect submission server-side after the build (uses `submit.production.ios.ascAppId` in eas.json).
 - Apple signing creds (dist cert + provisioning profile) and the ASC API key are stored on EAS servers for this project, so build+submit run fully non-interactively — no Apple login needed.
+
+## Exception: adding a NEW capability/entitlement breaks non-interactive builds
+When you add a new entitlement (e.g. `usesAppleSignIn: true` → `com.apple.developer.applesignin`), the
+**existing provisioning profile on EAS is stale** and the Xcode build fails at "Run fastlane" with
+`provisioning profile ... doesn't support the Sign in with Apple capability / doesn't include the
+... entitlement`. A `--non-interactive` build just reuses the stale profile and cannot fix it.
+**Fix (user must do it in the Shell — needs Apple ID + 2FA):** run an INTERACTIVE build
+`EAS_NO_VCS=1 eas build --platform ios --profile production --auto-submit` (NO `--non-interactive`),
+log into Apple when prompted; EAS then syncs the capability on the App ID and regenerates the
+provisioning profile with the new entitlement before building. Same applies to any new native
+capability (push, associated domains, etc.).
