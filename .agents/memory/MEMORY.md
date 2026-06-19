@@ -5,7 +5,7 @@
 - [Attribution SDKs + ATT](attribution-sdks-att.md) — AppsFlyer/TikTok/Meta share ONE ATT prompt; fbsdk clientToken is literal app.json config; fbsdk plugin auto-injects SKAdNetwork ids; new native module → EAS rebuild.
 - [Shelf bottle normalization](shelf-bottle-normalization.md) — uniform shelf = server-side height-based + bottom-aligned image normalization; re-sizing must reuse clean images (free), never re-run removal.ai.
 - [api-server has no hot reload](api-server-no-hot-reload.md) — dev script is build-then-run (no watch); restart the workflow after editing server code or you test stale bundled code.
-- [Supabase Apple native nonce](supabase-apple-native-nonce.md) — native Apple → signInWithIdToken needs nonce binding: SHA-256 hash to Apple, raw nonce to Supabase; needs expo-crypto + EAS rebuild.
+- [Supabase native social sign-in](supabase-native-social-signin.md) — Apple+Google via signInWithIdToken share provisionNewUser; Apple needs nonce, Google needs reversed-iOS-client-id URL scheme; both need EAS rebuild.
 - [Local notification de-duplication](notifications-dedup-identifier.md) — every re-scheduled expo-notification needs a fixed identifier or it stacks into duplicates; AsyncStorage throttle isn't enough.
 - [EXPO_PUBLIC vars + EAS Update timing](expo-public-env-eas-update.md) — EXPO_PUBLIC_* are inlined at bundle time; set them in the shell BEFORE `eas update`, existing builds won't pick up new ones.
 - [Fragrance notes source](fragrance-notes-source.md) — scan AI returns only name/brand (no notes); real notes come from searchFragrances; empty notes → analyzeFragranceProfile fallback (the "50% everywhere" bug).

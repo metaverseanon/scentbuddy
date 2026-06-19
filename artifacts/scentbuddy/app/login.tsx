@@ -16,6 +16,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Eye, EyeSlash, Check, X, WarningCircle, AppleLogo } from 'phosphor-react-native';
+import { AntDesign } from '@expo/vector-icons';
 import { useAuth } from '@/providers/AuthProvider';
 import { useTheme } from '@/providers/ThemeProvider';
 import { supabase } from '@/lib/supabase';
@@ -56,7 +57,16 @@ export default function LoginScreen() {
   const formSlide = useRef(new Animated.Value(60)).current;
   const formOpacity = useRef(new Animated.Value(0)).current;
 
-  const { signIn, signUp, signInWithApple, signInLoading, signUpLoading, signInWithAppleLoading } = useAuth();
+  const {
+    signIn,
+    signUp,
+    signInWithApple,
+    signInWithGoogle,
+    signInLoading,
+    signUpLoading,
+    signInWithAppleLoading,
+    signInWithGoogleLoading,
+  } = useAuth();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -204,6 +214,16 @@ export default function LoginScreen() {
     } catch (err: any) {
       if (err?.code === 'ERR_REQUEST_CANCELED') return;
       Alert.alert('Error', err?.message || 'Apple sign-in failed');
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+      router.replace('/(tabs)/(home)' as any);
+    } catch (err: any) {
+      if (err?.code === 'ERR_REQUEST_CANCELED' || err?.code === '12501') return;
+      Alert.alert('Error', err?.message || 'Google sign-in failed');
     }
   };
 
@@ -495,26 +515,46 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
 
-            {Platform.OS === 'ios' && (
+            {Platform.OS !== 'web' && (
               <>
                 <View style={styles.dividerRow}>
                   <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
                   <Text style={[styles.dividerText, { color: colors.subtext }]}>or</Text>
                   <View style={[styles.dividerLine, { backgroundColor: colors.border }]} />
                 </View>
+
+                {Platform.OS === 'ios' && (
+                  <TouchableOpacity
+                    style={[styles.appleBtn, (isLoading || signInWithAppleLoading || signInWithGoogleLoading) && { opacity: 0.6 }]}
+                    onPress={handleAppleSignIn}
+                    disabled={isLoading || signInWithAppleLoading || signInWithGoogleLoading}
+                    activeOpacity={0.8}
+                    testID="apple-signin-button"
+                  >
+                    {signInWithAppleLoading ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <>
+                        <AppleLogo size={20} color="#fff" weight="fill" />
+                        <Text style={styles.appleBtnText}>Sign in with Apple</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                )}
+
                 <TouchableOpacity
-                  style={[styles.appleBtn, (isLoading || signInWithAppleLoading) && { opacity: 0.6 }]}
-                  onPress={handleAppleSignIn}
-                  disabled={isLoading || signInWithAppleLoading}
+                  style={[styles.googleBtn, (isLoading || signInWithAppleLoading || signInWithGoogleLoading) && { opacity: 0.6 }]}
+                  onPress={handleGoogleSignIn}
+                  disabled={isLoading || signInWithAppleLoading || signInWithGoogleLoading}
                   activeOpacity={0.8}
-                  testID="apple-signin-button"
+                  testID="google-signin-button"
                 >
-                  {signInWithAppleLoading ? (
-                    <ActivityIndicator color="#fff" />
+                  {signInWithGoogleLoading ? (
+                    <ActivityIndicator color="#3c4043" />
                   ) : (
                     <>
-                      <AppleLogo size={20} color="#fff" weight="fill" />
-                      <Text style={styles.appleBtnText}>Sign in with Apple</Text>
+                      <AntDesign name="google" size={18} color="#4285F4" />
+                      <Text style={styles.googleBtnText}>Sign in with Google</Text>
                     </>
                   )}
                 </TouchableOpacity>
@@ -727,6 +767,23 @@ const styles = StyleSheet.create({
   },
   appleBtnText: {
     color: '#fff',
+    fontSize: 17,
+    fontWeight: '600' as const,
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#dadce0',
+    borderRadius: 14,
+    padding: 16,
+    marginTop: 12,
+  },
+  googleBtnText: {
+    color: '#3c4043',
     fontSize: 17,
     fontWeight: '600' as const,
   },

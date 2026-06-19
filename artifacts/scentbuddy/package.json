@@ -80,6 +80,7 @@
   },
   "dependencies": {
     "@expo/config-plugins": "^55.0.8",
+    "@react-native-google-signin/google-signin": "16.1.2",
     "expo-apple-authentication": "~8.0.8",
     "expo-crypto": "~15.0.9",
     "expo-tracking-transparency": "~6.0.8",

@@ -306,6 +306,105 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     },
   });
 
+  // "Sign in with Google" (native). Uses @react-native-google-signin to get a
+  // Google ID token, exchanges it for a Supabase session via signInWithIdToken,
+  // then provisions a profile the first time (Google returns name/email on every
+  // sign-in, so we can always populate display name).
+  const signInWithGoogleMutation = useMutation({
+    mutationFn: async () => {
+      const {
+        GoogleSignin,
+        isSuccessResponse,
+        isErrorWithCode,
+        statusCodes,
+      } = await import('@react-native-google-signin/google-signin');
+
+      const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+      const iosClientId = process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID;
+      if (!webClientId) {
+        throw new Error(
+          'Google sign-in is not configured. Missing EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID.',
+        );
+      }
+
+      GoogleSignin.configure({ webClientId, iosClientId });
+
+      let response;
+      try {
+        await GoogleSignin.hasPlayServices();
+        response = await GoogleSignin.signIn();
+      } catch (e: any) {
+        // Map the library's typed cancellation/in-progress codes to the same
+        // ERR_REQUEST_CANCELED the UI swallows, so a user backing out never
+        // surfaces a "sign-in failed" alert.
+        if (
+          isErrorWithCode(e) &&
+          (e.code === statusCodes.SIGN_IN_CANCELLED || e.code === statusCodes.IN_PROGRESS)
+        ) {
+          const cancelErr: any = new Error('Google sign-in cancelled');
+          cancelErr.code = 'ERR_REQUEST_CANCELED';
+          throw cancelErr;
+        }
+        throw e;
+      }
+
+      // Newer API also returns a non-throwing cancelled response.
+      if (!isSuccessResponse(response)) {
+        const cancelErr: any = new Error('Google sign-in cancelled');
+        cancelErr.code = 'ERR_REQUEST_CANCELED';
+        throw cancelErr;
+      }
+
+      const idToken = response.data.idToken;
+      if (!idToken) {
+        throw new Error('Google did not return an ID token. Please try again.');
+      }
+
+      const { data, error } = await supabase.auth.signInWithIdToken({
+        provider: 'google',
+        token: idToken,
+      });
+      if (error) throw error;
+
+      const user = data.user;
+      if (user) {
+        const { data: existingProfile, error: lookupError } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        // On a lookup error we deliberately do NOT provision: re-running
+        // provisionNewUser would upsert over an existing profile and reset
+        // username/referral_code/is_pro. Skipping is the safe failure mode.
+        if (existingProfile || lookupError) {
+          if (lookupError) {
+            console.log('[Auth] Google profile lookup failed, skipping provisioning:', lookupError.message);
+          }
+          void AppsFlyerEvents.login(user.id, user.email ?? '');
+          void TikTokEvents.login(user.id, user.email ?? '');
+          MetaEvents.login(user.id, user.email ?? '');
+        } else {
+          const googleUser = response.data.user;
+          const displayName =
+            googleUser.name?.trim() ||
+            [googleUser.givenName, googleUser.familyName].filter(Boolean).join(' ').trim() ||
+            (user.email ? user.email.split('@')[0] : 'Scent Lover');
+          const username = await generateUniqueUsername(
+            googleUser.givenName || (user.email ? user.email.split('@')[0] : 'scent'),
+          );
+          await provisionNewUser({
+            userId: user.id,
+            email: user.email ?? '',
+            username,
+            displayName,
+          });
+        }
+      }
+      return data;
+    },
+  });
+
   const router = useRouter();
 
   const signOut = useCallback(async () => {
@@ -400,15 +499,18 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     signIn: signInMutation.mutateAsync,
     signUp: signUpMutation.mutateAsync,
     signInWithApple: signInWithAppleMutation.mutateAsync,
+    signInWithGoogle: signInWithGoogleMutation.mutateAsync,
     signOut,
     deleteAccount,
     updateProfile,
     signInLoading: signInMutation.isPending,
     signUpLoading: signUpMutation.isPending,
     signInWithAppleLoading: signInWithAppleMutation.isPending,
+    signInWithGoogleLoading: signInWithGoogleMutation.isPending,
     signInError: signInMutation.error?.message ?? null,
     signUpError: signUpMutation.error?.message ?? null,
     signInWithAppleError: signInWithAppleMutation.error?.message ?? null,
+    signInWithGoogleError: signInWithGoogleMutation.error?.message ?? null,
   }), [
     session,
     profileQuery.data,
@@ -423,6 +525,9 @@ export const [AuthProvider, useAuth] = createContextHook(() => {
     signInWithAppleMutation.mutateAsync,
     signInWithAppleMutation.isPending,
     signInWithAppleMutation.error,
+    signInWithGoogleMutation.mutateAsync,
+    signInWithGoogleMutation.isPending,
+    signInWithGoogleMutation.error,
     signOut,
     deleteAccount,
     updateProfile,

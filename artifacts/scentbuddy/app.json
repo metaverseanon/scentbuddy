@@ -77,6 +77,12 @@
         {
           "userTrackingPermission": "ScentBuddy uses your activity to measure ad performance and show you more relevant fragrance recommendations."
         }
+      ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.REPLACE_WITH_REVERSED_IOS_CLIENT_ID"
+        }
       ]
     ],
     "experiments": {
