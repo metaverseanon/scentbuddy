@@ -38,6 +38,7 @@ const LAUNCH_OFFER_DURATION_MS = 48 * 60 * 60 * 1000;
 
 const IOS_MONTHLY_PRODUCT_ID = 'sb_monthly';
 const IOS_YEARLY_PRODUCT_ID = 'sb_yearly';
+const IOS_WEEKLY_PRODUCT_ID = 'sb_weekly';
 
 function isAnnualPlan(pkg: PurchasesPackage | null): boolean {
   if (!pkg) return false;
@@ -49,15 +50,38 @@ function isMonthlyPlan(pkg: PurchasesPackage | null): boolean {
   return pkg.product.identifier === IOS_MONTHLY_PRODUCT_ID || pkg.identifier === '$rc_monthly' || pkg.packageType === 'MONTHLY';
 }
 
+function isWeeklyPlan(pkg: PurchasesPackage | null): boolean {
+  if (!pkg) return false;
+  return pkg.product.identifier === IOS_WEEKLY_PRODUCT_ID || pkg.identifier === '$rc_weekly' || pkg.packageType === 'WEEKLY';
+}
+
+function getPlanName(pkg: PurchasesPackage | null): string {
+  if (isAnnualPlan(pkg)) return 'Yearly';
+  if (isMonthlyPlan(pkg)) return 'Monthly';
+  if (isWeeklyPlan(pkg)) return 'Weekly';
+  return 'Plan';
+}
+
+// Display order: Yearly (best value, default-selected) → Monthly → Weekly.
+function planOrder(pkg: PurchasesPackage): number {
+  if (isAnnualPlan(pkg)) return 0;
+  if (isMonthlyPlan(pkg)) return 1;
+  if (isWeeklyPlan(pkg)) return 2;
+  return 3;
+}
+
 function formatPrice(pkg: PurchasesPackage): string {
   const product = pkg.product;
   if (product.priceString) return product.priceString;
-  return isAnnualPlan(pkg) ? '$35.95' : '$5.99';
+  if (isAnnualPlan(pkg)) return '$35.95';
+  if (isWeeklyPlan(pkg)) return '$1.99';
+  return '$5.99';
 }
 
 function getPeriodLabel(pkg: PurchasesPackage): string {
   if (isAnnualPlan(pkg)) return 'year';
   if (isMonthlyPlan(pkg)) return 'month';
+  if (isWeeklyPlan(pkg)) return 'week';
   return 'period';
 }
 
@@ -264,7 +288,7 @@ export default function PaywallScreen() {
     // package object (standard/win-back offerings reuse `$rc_annual` etc.).
     const list = winbackMode ? winbackPackages : packages;
     const pkgToBuy = list.find(p => p.identifier === selectedPkg.identifier) ?? selectedPkg;
-    const plan = isAnnualPlan(pkgToBuy) ? 'yearly' : isMonthlyPlan(pkgToBuy) ? 'monthly' : 'other';
+    const plan = isAnnualPlan(pkgToBuy) ? 'yearly' : isMonthlyPlan(pkgToBuy) ? 'monthly' : isWeeklyPlan(pkgToBuy) ? 'weekly' : 'other';
     const variant = winbackMode ? 'winback' : 'standard';
     const productId = pkgToBuy.product.identifier;
     void logAnalyticsEvent('paywall_purchase_tapped', { source, plan, product_id: productId, variant });
@@ -305,7 +329,9 @@ export default function PaywallScreen() {
 
   const savingsText = offerActive ? getSavingsText(packages) : null;
 
-  const displayPackages = winbackMode ? winbackPackages : packages;
+  const displayPackages = [...(winbackMode ? winbackPackages : packages)].sort(
+    (a, b) => planOrder(a) - planOrder(b),
+  );
 
   // Real savings: discounted win-back annual price vs the standard annual price.
   const winbackSavingsPct: number | null = (() => {
@@ -584,7 +610,7 @@ export default function PaywallScreen() {
                     <View>
                       <View style={styles.packageNameRow}>
                         <Text style={[styles.packageName, { color: colors.text }]}>
-                          {isAnnual ? 'Yearly' : 'Monthly'}
+                          {getPlanName(pkg)}
                         </Text>
                         {cardSavings && (
                           <View style={[styles.savingsBadge, { backgroundColor: goldAccent }]}>
@@ -636,7 +662,9 @@ export default function PaywallScreen() {
                   ? 'Claim my discount'
                   : isAnnualPlan(selectedPkg)
                     ? (offerActive ? 'Claim 50% Off — Get Pro' : 'Get Pro Yearly')
-                    : 'Get Pro Monthly'}
+                    : isWeeklyPlan(selectedPkg)
+                      ? 'Get Pro Weekly'
+                      : 'Get Pro Monthly'}
               </Text>
             </>
           )}
