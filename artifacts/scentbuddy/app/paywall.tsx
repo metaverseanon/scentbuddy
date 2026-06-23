@@ -40,6 +40,23 @@ const IOS_MONTHLY_PRODUCT_ID = 'sb_monthly';
 const IOS_YEARLY_PRODUCT_ID = 'sb_yearly';
 const IOS_WEEKLY_PRODUCT_ID = 'sb_weekly';
 
+// TEMP (App Store review screenshot ONLY): hardcoded Weekly plan so the paywall
+// shows all three plans on a real device for the screenshot. It is injected ONLY
+// when a real weekly package isn't already served, so it self-removes the moment
+// Apple starts serving `sb_weekly`. NOT purchasable — REMOVE after capturing.
+const HARDCODED_WEEKLY_PACKAGE = {
+  identifier: '$rc_weekly',
+  packageType: 'WEEKLY',
+  product: {
+    identifier: 'sb_weekly',
+    priceString: '$2.99',
+    price: 2.99,
+    currencyCode: 'USD',
+    title: 'Weekly',
+    description: 'Scent Buddy Pro — Weekly',
+  },
+} as unknown as PurchasesPackage;
+
 function isAnnualPlan(pkg: PurchasesPackage | null): boolean {
   if (!pkg) return false;
   return pkg.product.identifier === IOS_YEARLY_PRODUCT_ID || pkg.identifier === '$rc_annual' || pkg.packageType === 'ANNUAL';
@@ -329,9 +346,14 @@ export default function PaywallScreen() {
 
   const savingsText = offerActive ? getSavingsText(packages) : null;
 
-  const displayPackages = [...(winbackMode ? winbackPackages : packages)].sort(
-    (a, b) => planOrder(a) - planOrder(b),
-  );
+  const displayPackages = (() => {
+    const base = [...(winbackMode ? winbackPackages : packages)];
+    // TEMP (review screenshot only): inject Weekly if not already served. REMOVE after capture.
+    if (!winbackMode && !base.some(isWeeklyPlan)) {
+      base.push(HARDCODED_WEEKLY_PACKAGE);
+    }
+    return base.sort((a, b) => planOrder(a) - planOrder(b));
+  })();
 
   // Real savings: discounted win-back annual price vs the standard annual price.
   const winbackSavingsPct: number | null = (() => {
