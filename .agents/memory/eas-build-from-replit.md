@@ -45,6 +45,11 @@ update is published to its branch (`production`) at its runtime version. On the
 device, OTA applies on the SECOND cold start (first launch downloads in
 background, next cold start swaps it in) — tell users to fully close & reopen twice.
 
+## Closed version train → must bump marketing version before resubmit
+A store submission fails (Apple errors `90062` "must contain a higher version than the previously approved version" + `90186` "Invalid Pre-Release Train. The train version 'X' is closed for new build submissions") once a build of that marketing version has been approved/released. The EAS submit CLI only prints a generic "Something went wrong when submitting" — the real reason is on the submission detail page.
+**Fix:** bump the marketing version (`expo.version` / CFBundleShortVersionString) in `app.json` to a higher value, rebuild, resubmit. autoIncrement does NOT do this — with `appVersionSource: remote` it only bumps the iOS `buildNumber` (`eas build:version:get` shows just buildNumber); the marketing version still comes from `app.json` `version`.
+**Why:** a single marketing version = one TestFlight/App Store train; reusing it after approval is rejected. **How to apply:** if a submit fails right after a clean build with the generic error, suspect a closed train before anything else; don't blind-retry submit (the binary already uploaded, so a 2nd attempt fails on the duplicate). Note: runtimeVersion policy `appVersion` means bumping the version also changes the OTA runtime, so the new build starts a fresh OTA runtime line.
+
 ## Exception: adding a NEW capability/entitlement breaks non-interactive builds
 When you add a new entitlement (e.g. `usesAppleSignIn: true` → `com.apple.developer.applesignin`), the
 **existing provisioning profile on EAS is stale** and the Xcode build fails at "Run fastlane" with
