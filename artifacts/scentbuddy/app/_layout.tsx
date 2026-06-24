@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useRouter, useRootNavigationState } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -33,6 +33,7 @@ function RootLayoutNav() {
   const [showSplash, setShowSplash] = useState(true);
   const [justOnboarded, setJustOnboarded] = useState(false);
   const router = useRouter();
+  const navState = useRootNavigationState();
 
   useCaptureReferralLink();
 
@@ -77,10 +78,12 @@ function RootLayoutNav() {
   }, []);
 
   // Open the paywall once the main Stack has actually mounted after onboarding.
-  // This replaces a fragile fixed-delay push from the (now unmounted) onboarding
-  // screen, so it cannot fire before the navigator is ready.
+  // Gate on useRootNavigationState().key so the push cannot fire before the
+  // navigator is ready (otherwise router.push throws, is swallowed, and the
+  // paywall is never shown). This replaces a fragile fixed-delay push.
   useEffect(() => {
     if (!justOnboarded || needsOnboarding || showSplash) return;
+    if (!navState?.key) return;
     const id = setTimeout(() => {
       try {
         router.push({ pathname: '/paywall', params: { source: 'onboarding' } });
@@ -90,7 +93,7 @@ function RootLayoutNav() {
       setJustOnboarded(false);
     }, 0);
     return () => clearTimeout(id);
-  }, [justOnboarded, needsOnboarding, showSplash, router]);
+  }, [justOnboarded, needsOnboarding, showSplash, navState?.key, router]);
 
   if (!onboardingChecked) {
     return null;
