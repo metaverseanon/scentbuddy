@@ -8,11 +8,11 @@ import {
   Animated,
   Easing,
   ScrollView,
-  NativeSyntheticEvent,
-  NativeScrollEvent,
   Platform,
   Image,
   ActivityIndicator,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -21,18 +21,21 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import {
   Drop,
-  BookOpen,
   Users,
   ChartBar,
   Sparkle,
   ArrowRight,
   Scan,
   Check,
-  Target,
-  Bell,
-  Gift,
   Crown,
+  Star,
+  AppleLogo,
+  Eye,
+  EyeSlash,
+  WarningCircle,
+  CaretLeft,
 } from 'phosphor-react-native';
+import { AntDesign } from '@expo/vector-icons';
 import {
   QUIZ_STEPS,
   ONBOARDING_QUIZ_KEY,
@@ -41,7 +44,9 @@ import {
   StarterPick,
 } from '@/constants/quiz';
 import { computeArchetype, ScentArchetype } from '@/lib/scent-archetype';
-import { searchFragrances, forceHttps } from '@/lib/supabase';
+import { searchFragrances, forceHttps, supabase } from '@/lib/supabase';
+import { useAuth } from '@/providers/AuthProvider';
+import { getPendingReferralCode } from '@/lib/referralLink';
 
 interface FragranceMatch {
   name: string;
@@ -53,106 +58,103 @@ interface FragranceMatch {
   imageUrl?: string | null;
 }
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 const ONBOARDING_KEY = 'scentbuddy_onboarding_done';
 
-interface OnboardingPage {
+const BG = '#0a0806';
+const GOLD = '#c49a6c';
+const GOLD_LIGHT = '#e3c39a';
+const TEXT = '#f6f1e9';
+const SUBTEXT = 'rgba(246,241,233,0.55)';
+const FAINT = 'rgba(246,241,233,0.38)';
+const CARD = 'rgba(255,255,255,0.05)';
+const CARD_BORDER = 'rgba(255,255,255,0.09)';
+const QUIZ_ACCENT = GOLD;
+
+interface Feature {
   title: string;
   subtitle: string;
   icon: React.ElementType;
-  iconColor: string;
-  gradientColors: [string, string];
-  emoji: string;
 }
 
-const PAGES: OnboardingPage[] = [
+const FEATURES: Feature[] = [
   {
-    title: 'Your Fragrance\nCollection',
-    subtitle: 'Catalog every bottle you own. Track notes, seasons, occasions, and never forget a scent again.',
+    title: 'Your collection,\nbeautifully kept',
+    subtitle: 'Catalog every bottle you own — notes, seasons, and occasions, all in one elegant place.',
     icon: Drop,
-    iconColor: '#c49a6c',
-    gradientColors: ['#1a1410', '#2a2015'],
-    emoji: '✨',
   },
   {
-    title: 'Daily Wear\nDiary',
-    subtitle: 'Log what you wear each day. Build streaks, track moods, and discover your scent patterns over time.',
-    icon: BookOpen,
-    iconColor: '#4CAF50',
-    gradientColors: ['#0f1a12', '#1a2a1e'],
-    emoji: '📖',
-  },
-  {
-    title: 'Community\n& Discovery',
-    subtitle: 'See what others are wearing, follow fellow enthusiasts, and sniff fragrances from their collections.',
-    icon: Users,
-    iconColor: '#5B8DEF',
-    gradientColors: ['#0f1420', '#1a2030'],
-    emoji: '👃',
-  },
-  {
-    title: 'Scan &\nDiscover',
-    subtitle: 'Point your camera at any perfume barcode to instantly identify it and add it to your collection or wishlist.',
+    title: 'Scan any bottle,\nknow it instantly',
+    subtitle: 'Point your camera at a barcode or label and identify any fragrance from 74K+ scents in seconds.',
     icon: Scan,
-    iconColor: '#FF6B6B',
-    gradientColors: ['#1a0f0f', '#2a1818'],
-    emoji: '📷',
   },
   {
-    title: 'Smart\nInsights',
-    subtitle: 'Get personalized stats, seasonal recommendations, and compare fragrances side by side.',
+    title: 'See what the\nworld is wearing',
+    subtitle: 'Follow fellow enthusiasts, share your daily scent, and discover bottles from real collections.',
+    icon: Users,
+  },
+  {
+    title: 'Insights that\nreveal your taste',
+    subtitle: 'Your Scent DNA, seasonal trends, streaks, and side-by-side comparisons — personalized to you.',
     icon: ChartBar,
-    iconColor: '#E8A838',
-    gradientColors: ['#1a1508', '#2a2510'],
-    emoji: '✨',
   },
   {
-    title: 'Goals &\nMilestones',
-    subtitle: 'Set wear goals, build streaks, and unlock milestones as you explore your collection every day.',
-    icon: Target,
-    iconColor: '#E8A838',
-    gradientColors: ['#1a1508', '#2a2010'],
-    emoji: '🎯',
-  },
-  {
-    title: 'Reminders\nThat Nudge',
-    subtitle: 'Gentle daily reminders to log your wear so you never break a streak or forget a favorite.',
-    icon: Bell,
-    iconColor: '#8B5CF6',
-    gradientColors: ['#140f1a', '#1f1828'],
-    emoji: '🔔',
-  },
-  {
-    title: 'Invite Friends,\nEarn Pro',
-    subtitle: 'Share your referral link. Every 5 friends who join unlocks a free month of Scentbuddy Pro.',
-    icon: Gift,
-    iconColor: '#EC4899',
-    gradientColors: ['#1a0f16', '#2a1823'],
-    emoji: '🎁',
-  },
-  {
-    title: 'Unlock\nScentbuddy Pro',
-    subtitle: 'Unlimited collection, AI-matched picks from 74K+ fragrances, advanced stats, and twin finder. Less than a coffee a month.',
+    title: 'Go Pro, unlock\neverything',
+    subtitle: 'Unlimited collection, AI-matched picks, advanced stats, and twin finder. Less than a coffee a month.',
     icon: Crown,
-    iconColor: '#c49a6c',
-    gradientColors: ['#1a1308', '#2a2010'],
-    emoji: '👑',
   },
 ];
 
-const QUIZ_GRADIENT: [string, string] = ['#14100c', '#1e1814'];
-const QUIZ_ACCENT = '#c49a6c';
+interface Testimonial {
+  quote: string;
+  name: string;
+  handle: string;
+}
+
+const TESTIMONIALS: Testimonial[] = [
+  {
+    quote: 'Finally an app that actually understands fragrance lovers. My whole collection lives here now.',
+    name: 'Maya R.',
+    handle: 'collector',
+  },
+  {
+    quote: 'The scan feature is magic. I rebuilt my entire shelf in one evening.',
+    name: 'Daniel K.',
+    handle: 'enthusiast',
+  },
+  {
+    quote: 'My Scent DNA was scarily accurate. The recommendations are spot on.',
+    name: 'Priya S.',
+    handle: 'niche fan',
+  },
+];
+
+type Phase = 'features' | 'social' | 'quiz' | 'result' | 'signin';
+type AuthMode = 'signup' | 'login';
 
 interface OnboardingScreenProps {
   onComplete?: () => void;
 }
 
+function Backdrop() {
+  return (
+    <>
+      <LinearGradient colors={[BG, '#150d06', BG]} style={StyleSheet.absoluteFill} />
+      <View style={styles.glowWrap} pointerEvents="none">
+        <View style={styles.glowOuter} />
+        <View style={styles.glowMid} />
+      </View>
+    </>
+  );
+}
+
 export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const scrollRef = useRef<ScrollView>(null);
-  const [currentPage, setCurrentPage] = useState(0);
-  const [phase, setPhase] = useState<'features' | 'quiz' | 'result'>('features');
+
+  const [phase, setPhase] = useState<Phase>('features');
+  const [featureIndex, setFeatureIndex] = useState(0);
+
   const [quizStep, setQuizStep] = useState(0);
   const [quizSelections, setQuizSelections] = useState<string[][]>(
     QUIZ_STEPS.map(() => [])
@@ -163,157 +165,167 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
   const [ownedPicks, setOwnedPicks] = useState<Record<string, boolean>>({});
   const [finishing, setFinishing] = useState(false);
 
-  const resultFade = useRef(new Animated.Value(0)).current;
-  const resultSlide = useRef(new Animated.Value(30)).current;
+  // Sign-in state
+  const [authMode, setAuthMode] = useState<AuthMode>('signup');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [username, setUsername] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [referralCode, setReferralCode] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle');
+  const usernameTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const paywallTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fadeAnims = useRef(PAGES.map(() => new Animated.Value(0))).current;
-  const slideAnims = useRef(PAGES.map(() => new Animated.Value(40))).current;
-  const emojiScale = useRef(PAGES.map(() => new Animated.Value(0.3))).current;
-  const emojiRotate = useRef(PAGES.map(() => new Animated.Value(-15))).current;
-  const buttonOpacity = useRef(new Animated.Value(0)).current;
-  const buttonSlide = useRef(new Animated.Value(20)).current;
+  const {
+    signIn,
+    signUp,
+    signInWithApple,
+    signInWithGoogle,
+    signInLoading,
+    signUpLoading,
+    signInWithAppleLoading,
+    signInWithGoogleLoading,
+  } = useAuth();
 
+  // Animations
+  const heroAnim = useRef(new Animated.Value(0)).current;
+  const contentAnim = useRef(new Animated.Value(0)).current;
+  const glowPulse = useRef(new Animated.Value(0)).current;
   const quizFade = useRef(new Animated.Value(0)).current;
-  const quizSlide = useRef(new Animated.Value(30)).current;
+  const quizSlide = useRef(new Animated.Value(24)).current;
+  const resultFade = useRef(new Animated.Value(0)).current;
+  const resultSlide = useRef(new Animated.Value(24)).current;
+  const signinFade = useRef(new Animated.Value(0)).current;
+  const signinSlide = useRef(new Animated.Value(24)).current;
 
-  const animatePage = useCallback((index: number) => {
-    fadeAnims[index].setValue(0);
-    slideAnims[index].setValue(40);
-    emojiScale[index].setValue(0.3);
-    emojiRotate[index].setValue(-15);
-
-    Animated.stagger(120, [
-      Animated.parallel([
-        Animated.timing(emojiScale[index], {
-          toValue: 1,
-          duration: 600,
-          easing: Easing.out(Easing.back(1.5)),
-          useNativeDriver: true,
-        }),
-        Animated.timing(emojiRotate[index], {
-          toValue: 0,
-          duration: 600,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.parallel([
-        Animated.timing(fadeAnims[index], {
-          toValue: 1,
-          duration: 500,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(slideAnims[index], {
-          toValue: 0,
-          duration: 500,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]),
-    ]).start();
-
-    if (index === PAGES.length - 1) {
-      Animated.parallel([
-        Animated.timing(buttonOpacity, {
-          toValue: 1,
-          duration: 400,
-          delay: 400,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(buttonSlide, {
-          toValue: 0,
-          duration: 400,
-          delay: 400,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    }
-  }, [fadeAnims, slideAnims, emojiScale, emojiRotate, buttonOpacity, buttonSlide]);
-
-  const animateQuizStep = useCallback(() => {
-    quizFade.setValue(0);
-    quizSlide.setValue(30);
-    Animated.parallel([
-      Animated.timing(quizFade, {
+  const animateFocal = useCallback(() => {
+    heroAnim.setValue(0);
+    contentAnim.setValue(0);
+    Animated.stagger(90, [
+      Animated.spring(heroAnim, {
         toValue: 1,
-        duration: 400,
-        easing: Easing.out(Easing.cubic),
+        friction: 7,
+        tension: 60,
         useNativeDriver: true,
       }),
-      Animated.timing(quizSlide, {
-        toValue: 0,
-        duration: 400,
+      Animated.timing(contentAnim, {
+        toValue: 1,
+        duration: 450,
         easing: Easing.out(Easing.cubic),
         useNativeDriver: true,
       }),
     ]).start();
-  }, [quizFade, quizSlide]);
+  }, [heroAnim, contentAnim]);
 
+  // Continuous soft glow pulse
   useEffect(() => {
-    animatePage(0);
-  }, [animatePage]);
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glowPulse, {
+          toValue: 1,
+          duration: 2400,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glowPulse, {
+          toValue: 0,
+          duration: 2400,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [glowPulse]);
+
+  // Animate focal point whenever the feature/social screen changes
+  useEffect(() => {
+    if (phase === 'features' || phase === 'social') {
+      animateFocal();
+    }
+  }, [phase, featureIndex, animateFocal]);
 
   useEffect(() => {
     if (phase === 'quiz') {
-      animateQuizStep();
+      quizFade.setValue(0);
+      quizSlide.setValue(24);
+      Animated.parallel([
+        Animated.timing(quizFade, { toValue: 1, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(quizSlide, { toValue: 0, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
     }
-  }, [phase, quizStep, animateQuizStep]);
+  }, [phase, quizStep, quizFade, quizSlide]);
 
   useEffect(() => {
     if (phase === 'result') {
       resultFade.setValue(0);
-      resultSlide.setValue(30);
+      resultSlide.setValue(24);
       Animated.parallel([
-        Animated.timing(resultFade, {
-          toValue: 1,
-          duration: 500,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
-        Animated.timing(resultSlide, {
-          toValue: 0,
-          duration: 500,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }),
+        Animated.timing(resultFade, { toValue: 1, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(resultSlide, { toValue: 0, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]).start();
     }
   }, [phase, resultFade, resultSlide]);
 
-  const handleScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const page = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-    if (page !== currentPage && page >= 0 && page < PAGES.length) {
-      setCurrentPage(page);
-      animatePage(page);
-      if (Platform.OS !== 'web') {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      }
+  useEffect(() => {
+    if (phase === 'signin') {
+      signinFade.setValue(0);
+      signinSlide.setValue(24);
+      Animated.parallel([
+        Animated.timing(signinFade, { toValue: 1, duration: 450, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+        Animated.timing(signinSlide, { toValue: 0, duration: 450, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      ]).start();
     }
-  }, [currentPage, animatePage]);
+  }, [phase, signinFade, signinSlide]);
 
-  const goToNext = useCallback(() => {
-    if (currentPage < PAGES.length - 1) {
-      const nextPage = currentPage + 1;
-      scrollRef.current?.scrollTo({ x: nextPage * SCREEN_WIDTH, animated: true });
-      setCurrentPage(nextPage);
-      animatePage(nextPage);
-      if (Platform.OS !== 'web') {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  // Prefill referral code from a deep link
+  useEffect(() => {
+    void getPendingReferralCode().then((code) => {
+      if (code) {
+        setReferralCode(code);
+        setAuthMode('signup');
       }
-    }
-  }, [currentPage, animatePage]);
-
-  const startQuiz = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    }
-    setPhase('quiz');
-    setQuizStep(0);
+    });
   }, []);
 
+  // Clear any pending timers on unmount to avoid state updates / navigation
+  // attempts after the onboarding screen is gone.
+  useEffect(() => {
+    return () => {
+      if (usernameTimeout.current) clearTimeout(usernameTimeout.current);
+      if (paywallTimer.current) clearTimeout(paywallTimer.current);
+    };
+  }, []);
+
+  const haptic = useCallback((style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) => {
+    if (Platform.OS !== 'web') void Haptics.impactAsync(style);
+  }, []);
+
+  // ---- Feature navigation ----
+  const nextFeature = useCallback(() => {
+    haptic();
+    if (featureIndex < FEATURES.length - 1) {
+      setFeatureIndex((i) => i + 1);
+    } else {
+      setPhase('social');
+    }
+  }, [featureIndex, haptic]);
+
+  const prevFeature = useCallback(() => {
+    if (featureIndex > 0) {
+      setFeatureIndex((i) => i - 1);
+    }
+  }, [featureIndex]);
+
+  const startQuiz = useCallback(() => {
+    if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setQuizStep(0);
+    setPhase('quiz');
+  }, []);
+
+  // ---- Quiz ----
   const fetchMatches = useCallback(async (seeds: string[]) => {
     setMatchesLoading(true);
     try {
@@ -352,7 +364,6 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     if (Platform.OS !== 'web') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
-
     const results: QuizResults = {
       scentFamilies: quizSelections[0],
       favoriteNotes: quizSelections[1],
@@ -360,13 +371,11 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
       priorities: quizSelections[3],
       completedAt: new Date().toISOString(),
     };
-
     try {
       await AsyncStorage.setItem(ONBOARDING_QUIZ_KEY, JSON.stringify(results));
     } catch (e) {
       console.log('Failed to save quiz results:', e);
     }
-
     const computed = computeArchetype(results);
     setArchetype(computed);
     setPhase('result');
@@ -374,23 +383,47 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
   }, [quizSelections, fetchMatches]);
 
   const toggleOwned = useCallback((match: FragranceMatch) => {
-    if (Platform.OS !== 'web') {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
+    haptic();
     const key = `${match.name}|${match.brand}`;
-    setOwnedPicks(prev => ({ ...prev, [key]: !prev[key] }));
-  }, []);
+    setOwnedPicks((prev) => ({ ...prev, [key]: !prev[key] }));
+  }, [haptic]);
 
-  const finishOnboarding = useCallback(async () => {
-    if (finishing) return;
-    setFinishing(true);
-    if (Platform.OS !== 'web') {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const toggleQuizSelection = useCallback((label: string) => {
+    haptic();
+    setQuizSelections((prev) => {
+      const updated = [...prev];
+      const stepSel = [...updated[quizStep]];
+      if (stepSel.includes(label)) {
+        updated[quizStep] = stepSel.filter((s) => s !== label);
+      } else {
+        updated[quizStep] = [...stepSel, label];
+      }
+      return updated;
+    });
+  }, [quizStep, haptic]);
+
+  const quizNext = useCallback(() => {
+    haptic();
+    if (quizStep < QUIZ_STEPS.length - 1) {
+      setQuizStep(quizStep + 1);
+    } else {
+      void goToResult();
     }
+  }, [quizStep, goToResult, haptic]);
 
+  const quizBack = useCallback(() => {
+    if (quizStep > 0) {
+      setQuizStep(quizStep - 1);
+    } else {
+      setPhase('social');
+    }
+  }, [quizStep]);
+
+  // ---- Flow to sign-in ----
+  const saveStarterPicks = useCallback(async () => {
     const picks: StarterPick[] = matches
-      .filter(m => ownedPicks[`${m.name}|${m.brand}`])
-      .map(m => ({
+      .filter((m) => ownedPicks[`${m.name}|${m.brand}`])
+      .map((m) => ({
         name: m.name,
         brand: m.brand,
         concentration: m.concentration ?? null,
@@ -399,7 +432,6 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
         baseNotes: m.baseNotes ?? [],
         imageUrl: m.imageUrl ?? null,
       }));
-
     try {
       if (picks.length > 0) {
         await AsyncStorage.setItem(STARTER_COLLECTION_KEY, JSON.stringify(picks));
@@ -409,87 +441,357 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     } catch (e) {
       console.log('Failed to save starter picks:', e);
     }
+  }, [matches, ownedPicks]);
 
-    if (onComplete) {
-      onComplete();
-    } else {
-      try {
-        await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
-      } catch (e) {
-        console.log('Failed to save onboarding state:', e);
-      }
-      router.replace('/');
+  const goToSigninFromResult = useCallback(async () => {
+    if (finishing) return;
+    setFinishing(true);
+    if (Platform.OS !== 'web') {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
+    await saveStarterPicks();
+    setFinishing(false);
+    setAuthError(null);
+    setPhase('signin');
+  }, [finishing, saveStarterPicks]);
 
+  const skipToSignin = useCallback(() => {
+    haptic();
+    setAuthError(null);
+    setPhase('signin');
+  }, [haptic]);
+
+  // ---- Completion: provisioning runs inside sign-in (reads quiz + picks) ----
+  const completeOnboarding = useCallback(async () => {
     try {
       await AsyncStorage.setItem('paywall_last_shown_at', String(Date.now()));
       await AsyncStorage.setItem('paywall_open_count', '0');
     } catch (e) {
       console.log('Failed to record paywall trigger:', e);
     }
-
-    setTimeout(() => {
-      try {
-        router.push({ pathname: '/paywall', params: { source: 'onboarding' } });
-      } catch (e) {
-        console.log('Failed to push paywall after onboarding:', e);
-      }
-    }, 600);
-  }, [finishing, matches, ownedPicks, router, onComplete]);
-
-  const skipOnboarding = useCallback(async () => {
     if (onComplete) {
+      // _layout opens the paywall once the main Stack has mounted.
       onComplete();
     } else {
+      // Standalone fallback (no host gate): navigate home then nudge the paywall.
       try {
         await AsyncStorage.setItem(ONBOARDING_KEY, 'true');
       } catch (e) {
         console.log('Failed to save onboarding state:', e);
       }
       router.replace('/');
+      paywallTimer.current = setTimeout(() => {
+        try {
+          router.push({ pathname: '/paywall', params: { source: 'onboarding' } });
+        } catch (e) {
+          console.log('Failed to push paywall after onboarding:', e);
+        }
+      }, 600);
     }
-  }, [router, onComplete]);
+  }, [onComplete, router]);
 
-  const toggleQuizSelection = useCallback((label: string) => {
-    if (Platform.OS !== 'web') {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  // ---- Sign-in handlers (call useAuth directly; Stack is not mounted yet) ----
+  const handleApple = useCallback(async () => {
+    setAuthError(null);
+    try {
+      await signInWithApple();
+      await completeOnboarding();
+    } catch (err: any) {
+      if (err?.code === 'ERR_REQUEST_CANCELED') return;
+      setAuthError(err?.message || 'Apple sign-in failed');
     }
-    setQuizSelections(prev => {
-      const updated = [...prev];
-      const stepSel = [...updated[quizStep]];
-      if (stepSel.includes(label)) {
-        updated[quizStep] = stepSel.filter(s => s !== label);
-      } else {
-        updated[quizStep] = [...stepSel, label];
+  }, [signInWithApple, completeOnboarding]);
+
+  const handleGoogle = useCallback(async () => {
+    setAuthError(null);
+    try {
+      await signInWithGoogle();
+      await completeOnboarding();
+    } catch (err: any) {
+      if (err?.code === 'ERR_REQUEST_CANCELED' || err?.code === '12501') return;
+      setAuthError(err?.message || 'Google sign-in failed');
+    }
+  }, [signInWithGoogle, completeOnboarding]);
+
+  const checkUsername = useCallback((value: string) => {
+    if (usernameTimeout.current) clearTimeout(usernameTimeout.current);
+    if (!value.trim() || value.trim().length < 3) {
+      setUsernameStatus('idle');
+      return;
+    }
+    setUsernameStatus('checking');
+    usernameTimeout.current = setTimeout(async () => {
+      try {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('username', value.trim().toLowerCase())
+          .maybeSingle();
+        if (error) {
+          setUsernameStatus('idle');
+          return;
+        }
+        setUsernameStatus(data ? 'taken' : 'available');
+      } catch {
+        setUsernameStatus('idle');
       }
-      return updated;
-    });
-  }, [quizStep]);
+    }, 500);
+  }, []);
 
-  const quizNext = useCallback(() => {
-    if (Platform.OS !== 'web') {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  const handleUsernameChange = useCallback((value: string) => {
+    const sanitized = value.replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+    setUsername(sanitized);
+    checkUsername(sanitized);
+  }, [checkUsername]);
+
+  const handleEmailSubmit = useCallback(async () => {
+    setAuthError(null);
+    const em = email.trim();
+    if (!em || !password) {
+      setAuthError('Please enter your email and password.');
+      return;
     }
-    if (quizStep < QUIZ_STEPS.length - 1) {
-      setQuizStep(quizStep + 1);
+    if (authMode === 'signup') {
+      const uname = username.trim();
+      if (uname.length < 3) {
+        setAuthError('Pick a username with at least 3 characters.');
+        return;
+      }
+      if (usernameStatus === 'taken') {
+        setAuthError('That username is already taken.');
+        return;
+      }
+      if (password.length < 8) {
+        setAuthError('Password must be at least 8 characters.');
+        return;
+      }
+      try {
+        await signUp({
+          email: em,
+          password,
+          username: uname,
+          displayName: uname,
+          referralCode: referralCode.trim() || undefined,
+        });
+        await completeOnboarding();
+      } catch (err: any) {
+        setAuthError(err?.message || 'Could not create your account.');
+      }
     } else {
-      void goToResult();
+      try {
+        await signIn({ email: em, password });
+        await completeOnboarding();
+      } catch (err: any) {
+        setAuthError(err?.message || 'Could not sign you in.');
+      }
     }
-  }, [quizStep, goToResult]);
+  }, [authMode, email, password, username, usernameStatus, referralCode, signUp, signIn, completeOnboarding]);
 
-  const quizBack = useCallback(() => {
-    if (quizStep > 0) {
-      setQuizStep(quizStep - 1);
-    } else {
-      setPhase('features');
-    }
-  }, [quizStep]);
+  const authBusy = signInLoading || signUpLoading || signInWithAppleLoading || signInWithGoogleLoading;
 
-  if (phase === 'result' && archetype) {
-    const ownedCount = matches.filter(m => ownedPicks[`${m.name}|${m.brand}`]).length;
+  const glowScale = glowPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.18] });
+  const glowOpacity = glowPulse.interpolate({ inputRange: [0, 1], outputRange: [0.45, 0.8] });
+  const heroScale = heroAnim.interpolate({ inputRange: [0, 1], outputRange: [0.82, 1] });
+  const contentTranslate = contentAnim.interpolate({ inputRange: [0, 1], outputRange: [22, 0] });
+
+  // ===================== SIGN-IN =====================
+  if (phase === 'signin') {
     return (
       <View style={styles.container}>
-        <LinearGradient colors={QUIZ_GRADIENT} style={StyleSheet.absoluteFill} />
+        <Backdrop />
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.flex}
+        >
+          <View style={[styles.signinTopBar, { paddingTop: insets.top + 8 }]}>
+            <TouchableOpacity
+              onPress={() => setPhase(archetype ? 'result' : 'features')}
+              style={styles.iconBtn}
+              hitSlop={10}
+            >
+              <CaretLeft size={20} color={SUBTEXT} weight="bold" />
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            contentContainerStyle={[styles.signinScroll, { paddingBottom: insets.bottom + 28 }]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <Animated.View style={{ opacity: signinFade, transform: [{ translateY: signinSlide }] }}>
+              <View style={styles.signinHeroWrap}>
+                <Animated.View style={[styles.heroGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
+                <View style={styles.heroTileSm}>
+                  <Sparkle size={30} color={GOLD} weight="fill" />
+                </View>
+              </View>
+
+              <Text style={styles.signinTitle}>
+                {authMode === 'signup' ? 'Create your account' : 'Welcome back'}
+              </Text>
+              <Text style={styles.signinSub}>
+                {authMode === 'signup'
+                  ? 'One last step — sign in to save your collection and sync everywhere.'
+                  : 'Sign in to pick up right where you left off.'}
+              </Text>
+
+              {Platform.OS === 'ios' && (
+                <TouchableOpacity
+                  style={[styles.appleBtn, authBusy && styles.btnDim]}
+                  onPress={handleApple}
+                  disabled={authBusy}
+                  activeOpacity={0.85}
+                  testID="apple-signin-button"
+                >
+                  {signInWithAppleLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <>
+                      <AppleLogo size={20} color="#fff" weight="fill" />
+                      <Text style={styles.appleBtnText}>Continue with Apple</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              {Platform.OS !== 'web' && (
+                <TouchableOpacity
+                  style={[styles.googleBtn, authBusy && styles.btnDim]}
+                  onPress={handleGoogle}
+                  disabled={authBusy}
+                  activeOpacity={0.85}
+                  testID="google-signin-button"
+                >
+                  {signInWithGoogleLoading ? (
+                    <ActivityIndicator color="#3c4043" />
+                  ) : (
+                    <>
+                      <AntDesign name="google" size={18} color="#4285F4" />
+                      <Text style={styles.googleBtnText}>Continue with Google</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
+
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or use email</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              {authMode === 'signup' && (
+                <View style={styles.inputGroup}>
+                  <View style={styles.inputShell}>
+                    <Text style={styles.inputAt}>@</Text>
+                    <TextInput
+                      style={styles.inputFlex}
+                      value={username}
+                      onChangeText={handleUsernameChange}
+                      placeholder="username"
+                      placeholderTextColor={FAINT}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      testID="username-input"
+                    />
+                    {usernameStatus === 'checking' && <ActivityIndicator size="small" color={SUBTEXT} />}
+                    {usernameStatus === 'available' && <Check size={16} color="#34c759" weight="bold" />}
+                    {usernameStatus === 'taken' && <WarningCircle size={16} color="#ff6b6b" weight="fill" />}
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.inputGroup}>
+                <View style={styles.inputShell}>
+                  <TextInput
+                    style={styles.inputFlex}
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="your@email.com"
+                    placeholderTextColor={FAINT}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="email-address"
+                    testID="email-input"
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <View style={styles.inputShell}>
+                  <TextInput
+                    style={styles.inputFlex}
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Password"
+                    placeholderTextColor={FAINT}
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    testID="password-input"
+                  />
+                  <TouchableOpacity onPress={() => setShowPassword((s) => !s)} hitSlop={10}>
+                    {showPassword ? <EyeSlash size={18} color={SUBTEXT} /> : <Eye size={18} color={SUBTEXT} />}
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {authMode === 'signup' && !!referralCode && (
+                <View style={styles.referralPill}>
+                  <Sparkle size={13} color={GOLD} weight="fill" />
+                  <Text style={styles.referralText}>Referral code {referralCode} applied</Text>
+                </View>
+              )}
+
+              {!!authError && (
+                <View style={styles.errorRow}>
+                  <WarningCircle size={15} color="#ff6b6b" weight="fill" />
+                  <Text style={styles.errorText}>{authError}</Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={[styles.primaryBtn, authBusy && styles.btnDim]}
+                onPress={handleEmailSubmit}
+                disabled={authBusy}
+                activeOpacity={0.9}
+                testID="email-submit"
+              >
+                {(signInLoading || signUpLoading) ? (
+                  <ActivityIndicator color="#1a1208" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>
+                    {authMode === 'signup' ? 'Create account' : 'Sign in'}
+                  </Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.toggleRow}
+                onPress={() => {
+                  setAuthError(null);
+                  setAuthMode((m) => (m === 'signup' ? 'login' : 'signup'));
+                }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.toggleText}>
+                  {authMode === 'signup' ? 'Already have an account? ' : 'New to Scentbuddy? '}
+                  <Text style={styles.toggleTextAccent}>
+                    {authMode === 'signup' ? 'Sign in' : 'Create one'}
+                  </Text>
+                </Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </View>
+    );
+  }
+
+  // ===================== RESULT =====================
+  if (phase === 'result' && archetype) {
+    const ownedCount = matches.filter((m) => ownedPicks[`${m.name}|${m.brand}`]).length;
+    return (
+      <View style={styles.container}>
+        <Backdrop />
         <ScrollView
           contentContainerStyle={[
             styles.resultScroll,
@@ -499,7 +801,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
         >
           <Animated.View style={{ opacity: resultFade, transform: [{ translateY: resultSlide }] }}>
             <View style={styles.resultBadge}>
-              <Sparkle size={16} color={QUIZ_ACCENT} weight="fill" />
+              <Sparkle size={16} color={GOLD} weight="fill" />
               <Text style={styles.resultBadgeText}>YOUR SCENT PROFILE</Text>
             </View>
 
@@ -514,12 +816,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
                     <Text style={styles.familyPct}>{fam.pct}%</Text>
                   </View>
                   <View style={styles.familyTrack}>
-                    <View
-                      style={[
-                        styles.familyFill,
-                        { width: `${fam.pct}%`, backgroundColor: fam.color },
-                      ]}
-                    />
+                    <View style={[styles.familyFill, { width: `${fam.pct}%`, backgroundColor: fam.color }]} />
                   </View>
                 </View>
               ))}
@@ -534,7 +831,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 
             {matchesLoading ? (
               <View style={styles.matchesLoading}>
-                <ActivityIndicator color={QUIZ_ACCENT} />
+                <ActivityIndicator color={GOLD} />
                 <Text style={styles.matchesLoadingText}>Matching your profile...</Text>
               </View>
             ) : matches.length === 0 ? (
@@ -557,7 +854,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
                         <Image source={{ uri: m.imageUrl }} style={styles.matchImage} />
                       ) : (
                         <View style={[styles.matchImage, styles.matchImagePlaceholder]}>
-                          <Drop size={20} color={QUIZ_ACCENT} />
+                          <Drop size={20} color={GOLD} />
                         </View>
                       )}
                       <View style={styles.matchInfo}>
@@ -565,7 +862,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
                         <Text style={styles.matchBrand} numberOfLines={1}>{m.brand}</Text>
                       </View>
                       <View style={[styles.matchCheckbox, owned && styles.matchCheckboxSelected]}>
-                        {owned ? <Check size={14} color="#fff" weight="bold" /> : null}
+                        {owned ? <Check size={14} color="#1a1208" weight="bold" /> : null}
                       </View>
                     </TouchableOpacity>
                   );
@@ -575,23 +872,24 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
           </Animated.View>
         </ScrollView>
 
-        <View style={[styles.resultFooter, { paddingBottom: insets.bottom + 24 }]}>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
           <TouchableOpacity
-            style={styles.resultContinueBtn}
-            onPress={finishOnboarding}
+            style={[styles.primaryBtn, finishing && styles.btnDim]}
+            onPress={goToSigninFromResult}
             disabled={finishing}
-            activeOpacity={0.85}
+            activeOpacity={0.9}
           >
-            <Text style={styles.resultContinueText}>
-              {ownedCount > 0 ? `Add ${ownedCount} & Continue` : 'Continue'}
+            <Text style={styles.primaryBtnText}>
+              {ownedCount > 0 ? `Add ${ownedCount} & continue` : 'Continue'}
             </Text>
-            <ArrowRight size={18} color="#fff" />
+            <ArrowRight size={18} color="#1a1208" weight="bold" />
           </TouchableOpacity>
         </View>
       </View>
     );
   }
 
+  // ===================== QUIZ =====================
   if (phase === 'quiz') {
     const currentQuizStep = QUIZ_STEPS[quizStep];
     const currentSelections = quizSelections[quizStep];
@@ -599,47 +897,25 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 
     return (
       <View style={styles.container}>
-        <LinearGradient colors={QUIZ_GRADIENT} style={StyleSheet.absoluteFill} />
-
-        <View style={[styles.quizTopBar, { paddingTop: insets.top + 12 }]}>
-          <TouchableOpacity onPress={quizBack} style={styles.quizBackBtn}>
-            <Text style={styles.quizBackText}>
-              {quizStep === 0 ? 'Back' : 'Back'}
-            </Text>
+        <Backdrop />
+        <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
+          <TouchableOpacity onPress={quizBack} style={styles.iconBtn} hitSlop={10}>
+            <CaretLeft size={20} color={SUBTEXT} weight="bold" />
           </TouchableOpacity>
-          <TouchableOpacity onPress={skipOnboarding} style={styles.skipButton}>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progress}%` }]} />
+          </View>
+          <TouchableOpacity onPress={skipToSignin} style={styles.skipBtn} hitSlop={10}>
             <Text style={styles.skipText}>Skip</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.quizProgressContainer}>
-          <View style={styles.quizProgressTrack}>
-            <Animated.View
-              style={[
-                styles.quizProgressFill,
-                { width: `${progress}%` },
-              ]}
-            />
-          </View>
-          <Text style={styles.quizStepLabel}>
-            {quizStep + 1} / {QUIZ_STEPS.length}
-          </Text>
-        </View>
-
-        <Animated.View
-          style={[
-            styles.quizContent,
-            {
-              opacity: quizFade,
-              transform: [{ translateY: quizSlide }],
-            },
-          ]}
-        >
+        <Animated.View style={[styles.quizContent, { opacity: quizFade, transform: [{ translateY: quizSlide }] }]}>
           <Text style={styles.quizTitle}>{currentQuizStep.title}</Text>
           <Text style={styles.quizSubtitle}>{currentQuizStep.subtitle}</Text>
 
           <ScrollView
-            style={styles.quizOptionsScroll}
+            style={styles.flex}
             contentContainerStyle={styles.quizOptionsContainer}
             showsVerticalScrollIndicator={false}
           >
@@ -648,26 +924,21 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
               return (
                 <TouchableOpacity
                   key={opt.label}
-                  style={[
-                    styles.quizOption,
-                    selected && styles.quizOptionSelected,
-                  ]}
+                  style={[styles.quizOption, selected && styles.quizOptionSelected]}
                   onPress={() => toggleQuizSelection(opt.label)}
-                  activeOpacity={0.7}
+                  activeOpacity={0.8}
                 >
                   <View style={styles.quizOptionLeft}>
                     <Text style={styles.quizOptionEmoji}>{opt.emoji}</Text>
-                    <View style={styles.quizOptionTextGroup}>
+                    <View style={styles.flex}>
                       <Text style={[styles.quizOptionLabel, selected && styles.quizOptionLabelSelected]}>
                         {opt.label}
                       </Text>
-                      {opt.sub ? (
-                        <Text style={styles.quizOptionSub}>{opt.sub}</Text>
-                      ) : null}
+                      {opt.sub ? <Text style={styles.quizOptionSub}>{opt.sub}</Text> : null}
                     </View>
                   </View>
                   <View style={[styles.quizCheckbox, selected && styles.quizCheckboxSelected]}>
-                    {selected ? <Check size={14} color="#fff" weight="bold" /> : null}
+                    {selected ? <Check size={14} color="#1a1208" weight="bold" /> : null}
                   </View>
                 </TouchableOpacity>
               );
@@ -675,23 +946,20 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
           </ScrollView>
         </Animated.View>
 
-        <View style={[styles.quizFooter, { paddingBottom: insets.bottom + 24 }]}>
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
           <TouchableOpacity
-            style={[
-              styles.quizContinueBtn,
-              currentSelections.length === 0 && styles.quizContinueBtnDisabled,
-            ]}
+            style={[styles.primaryBtn, currentSelections.length === 0 && styles.btnDim]}
             onPress={quizNext}
             disabled={currentSelections.length === 0}
-            activeOpacity={0.8}
+            activeOpacity={0.9}
           >
-            <Text style={styles.quizContinueText}>
-              {quizStep === QUIZ_STEPS.length - 1 ? 'Finish & Get Started' : 'Continue'}
+            <Text style={styles.primaryBtnText}>
+              {quizStep === QUIZ_STEPS.length - 1 ? 'Reveal my Scent DNA' : 'Continue'}
             </Text>
             {quizStep === QUIZ_STEPS.length - 1 ? (
-              <Sparkle size={18} color="#fff" />
+              <Sparkle size={18} color="#1a1208" weight="fill" />
             ) : (
-              <ArrowRight size={18} color="#fff" />
+              <ArrowRight size={18} color="#1a1208" weight="bold" />
             )}
           </TouchableOpacity>
         </View>
@@ -699,136 +967,115 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     );
   }
 
+  // ===================== SOCIAL PROOF =====================
+  if (phase === 'social') {
+    return (
+      <View style={styles.container}>
+        <Backdrop />
+        <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
+          <TouchableOpacity onPress={() => setPhase('features')} style={styles.iconBtn} hitSlop={10}>
+            <CaretLeft size={20} color={SUBTEXT} weight="bold" />
+          </TouchableOpacity>
+          <View style={styles.flex} />
+          <TouchableOpacity onPress={skipToSignin} style={styles.skipBtn} hitSlop={10}>
+            <Text style={styles.skipText}>Skip</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          contentContainerStyle={styles.socialScroll}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View style={{ opacity: contentAnim, transform: [{ translateY: contentTranslate }] }}>
+            <View style={styles.starsRow}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star key={i} size={20} color={GOLD} weight="fill" />
+              ))}
+            </View>
+            <Text style={styles.socialTitle}>Loved by collectors</Text>
+            <Text style={styles.socialSub}>Join thousands building their scent library with Scentbuddy.</Text>
+
+            {TESTIMONIALS.map((t) => (
+              <View key={t.name} style={styles.testimonialCard}>
+                <View style={styles.starsRowSm}>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star key={i} size={12} color={GOLD} weight="fill" />
+                  ))}
+                </View>
+                <Text style={styles.testimonialQuote}>&ldquo;{t.quote}&rdquo;</Text>
+                <Text style={styles.testimonialName}>
+                  {t.name} <Text style={styles.testimonialHandle}>· {t.handle}</Text>
+                </Text>
+              </View>
+            ))}
+          </Animated.View>
+        </ScrollView>
+
+        <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
+          <TouchableOpacity style={styles.primaryBtn} onPress={startQuiz} activeOpacity={0.9}>
+            <Sparkle size={18} color="#1a1208" weight="fill" />
+            <Text style={styles.primaryBtnText}>Take the scent quiz</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ===================== FEATURES =====================
+  const feature = FEATURES[featureIndex];
+  const FeatureIcon = feature.icon;
+  const isLastFeature = featureIndex === FEATURES.length - 1;
+
   return (
     <View style={styles.container}>
-      <View style={[styles.skipContainer, { top: insets.top + 12 }]}>
+      <Backdrop />
+      <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
         <TouchableOpacity
-          onPress={skipOnboarding}
-          style={styles.skipButton}
-          testID="onboarding-skip"
+          onPress={prevFeature}
+          style={[styles.iconBtn, featureIndex === 0 && styles.hidden]}
+          disabled={featureIndex === 0}
+          hitSlop={10}
         >
+          <CaretLeft size={20} color={SUBTEXT} weight="bold" />
+        </TouchableOpacity>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${((featureIndex + 1) / FEATURES.length) * 100}%` }]} />
+        </View>
+        <TouchableOpacity onPress={skipToSignin} style={styles.skipBtn} hitSlop={10} testID="onboarding-skip">
           <Text style={styles.skipText}>Skip</Text>
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        ref={scrollRef}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={handleScroll}
-        scrollEventThrottle={16}
-        decelerationRate="fast"
-        bounces={false}
-      >
-        {PAGES.map((page, index) => {
-          const IconComponent = page.icon;
-          const rotation = emojiRotate[index].interpolate({
-            inputRange: [-15, 0],
-            outputRange: ['-15deg', '0deg'],
-          });
+      <View style={styles.featureBody}>
+        <Animated.View style={[styles.heroWrap, { transform: [{ scale: heroScale }], opacity: heroAnim }]}>
+          <Animated.View style={[styles.heroGlow, { opacity: glowOpacity, transform: [{ scale: glowScale }] }]} />
+          <View style={styles.heroTile}>
+            <FeatureIcon size={48} color={GOLD} weight="duotone" />
+          </View>
+        </Animated.View>
 
-          return (
-            <View key={index} style={styles.page}>
-              <LinearGradient
-                colors={page.gradientColors}
-                style={styles.pageGradient}
-              >
-                <View style={[styles.pageContent, { paddingTop: insets.top + 80 }]}>
-                  <Animated.View
-                    style={[
-                      styles.emojiContainer,
-                      {
-                        transform: [
-                          { scale: emojiScale[index] },
-                          { rotate: rotation },
-                        ],
-                      },
-                    ]}
-                  >
-                    <View style={[styles.emojiCircle, { borderColor: page.iconColor + '30' }]}>
-                      <View style={[styles.emojiInner, { backgroundColor: page.iconColor + '15' }]}>
-                        <Text style={styles.emoji}>{page.emoji}</Text>
-                      </View>
-                    </View>
-                    <View style={[styles.iconBadge, { backgroundColor: page.iconColor }]}>
-                      <IconComponent size={18} color="#fff" />
-                    </View>
-                  </Animated.View>
+        <Animated.View style={{ opacity: contentAnim, transform: [{ translateY: contentTranslate }] }}>
+          <Text style={styles.featureTitle}>{feature.title}</Text>
+          <Text style={styles.featureSubtitle}>{feature.subtitle}</Text>
+        </Animated.View>
+      </View>
 
-                  <Animated.View
-                    style={{
-                      opacity: fadeAnims[index],
-                      transform: [{ translateY: slideAnims[index] }],
-                    }}
-                  >
-                    <Text style={styles.title}>{page.title}</Text>
-                    <Text style={styles.subtitle}>{page.subtitle}</Text>
-                  </Animated.View>
-                </View>
-
-                <View style={styles.decorativeDotsContainer}>
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.decorativeDot,
-                        {
-                          backgroundColor: page.iconColor + '08',
-                          width: 60 + i * 20,
-                          height: 60 + i * 20,
-                          left: (i % 2 === 0 ? -20 : SCREEN_WIDTH - 80) + (i * 15),
-                          top: 200 + i * 80,
-                          borderRadius: (60 + i * 20) / 2,
-                        },
-                      ]}
-                    />
-                  ))}
-                </View>
-              </LinearGradient>
-            </View>
-          );
-        })}
-      </ScrollView>
-
-      <View style={[styles.bottomSection, { paddingBottom: insets.bottom + 24 }]}>
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
         <View style={styles.dotsRow}>
-          {PAGES.map((page, index) => (
+          {FEATURES.map((_, i) => (
             <View
-              key={index}
+              key={i}
               style={[
                 styles.dot,
-                {
-                  backgroundColor: index === currentPage ? page.iconColor : 'rgba(255,255,255,0.2)',
-                  width: index === currentPage ? 28 : 8,
-                },
+                { backgroundColor: i === featureIndex ? GOLD : 'rgba(255,255,255,0.18)', width: i === featureIndex ? 24 : 7 },
               ]}
             />
           ))}
         </View>
-
-        {currentPage < PAGES.length - 1 ? (
-          <TouchableOpacity
-            style={[styles.nextButton, { backgroundColor: PAGES[currentPage].iconColor }]}
-            onPress={goToNext}
-            activeOpacity={0.8}
-            testID="onboarding-next"
-          >
-            <ArrowRight size={22} color="#fff" />
-          </TouchableOpacity>
-        ) : (
-          <Animated.View style={{ opacity: buttonOpacity, transform: [{ translateY: buttonSlide }] }}>
-            <TouchableOpacity
-              style={[styles.getStartedButton, { backgroundColor: QUIZ_ACCENT }]}
-              onPress={startQuiz}
-              activeOpacity={0.8}
-              testID="onboarding-start"
-            >
-              <Sparkle size={20} color="#fff" />
-              <Text style={styles.getStartedText}>Take Scent Quiz</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        )}
+        <TouchableOpacity style={styles.primaryBtn} onPress={nextFeature} activeOpacity={0.9} testID="onboarding-next">
+          <Text style={styles.primaryBtnText}>{isLastFeature ? 'Continue' : 'Next'}</Text>
+          <ArrowRight size={18} color="#1a1208" weight="bold" />
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -837,199 +1084,229 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0d0b08',
+    backgroundColor: BG,
   },
-  skipContainer: {
+  flex: {
+    flex: 1,
+  },
+  hidden: {
+    opacity: 0,
+  },
+  glowWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+  },
+  glowOuter: {
     position: 'absolute',
-    right: 20,
+    top: -SCREEN_HEIGHT * 0.12,
+    width: SCREEN_HEIGHT * 0.62,
+    height: SCREEN_HEIGHT * 0.62,
+    borderRadius: SCREEN_HEIGHT * 0.31,
+    backgroundColor: 'rgba(196,154,108,0.07)',
+  },
+  glowMid: {
+    position: 'absolute',
+    top: SCREEN_HEIGHT * 0.02,
+    width: SCREEN_HEIGHT * 0.34,
+    height: SCREEN_HEIGHT * 0.34,
+    borderRadius: SCREEN_HEIGHT * 0.17,
+    backgroundColor: 'rgba(196,154,108,0.07)',
+  },
+
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    gap: 14,
     zIndex: 10,
   },
-  skipButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  progressTrack: {
+    flex: 1,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 2,
+    backgroundColor: GOLD,
+  },
+  skipBtn: {
+    paddingHorizontal: 6,
+    paddingVertical: 6,
   },
   skipText: {
-    color: 'rgba(255,255,255,0.5)',
+    color: FAINT,
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
-  page: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_HEIGHT,
-  },
-  pageGradient: {
-    flex: 1,
-  },
-  pageContent: {
+
+  // Feature focal point
+  featureBody: {
     flex: 1,
     paddingHorizontal: 32,
-    zIndex: 2,
-  },
-  emojiContainer: {
-    alignSelf: 'flex-start',
-    marginBottom: 40,
-  },
-  emojiCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    borderWidth: 2,
-    alignItems: 'center',
     justifyContent: 'center',
   },
-  emojiInner: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+  heroWrap: {
     alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: 44,
+    height: 180,
   },
-  emoji: {
-    fontSize: 48,
-  },
-  iconBadge: {
+  heroGlow: {
     position: 'absolute',
-    bottom: -4,
-    right: -4,
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: 'rgba(196,154,108,0.16)',
+  },
+  heroTile: {
+    width: 112,
+    height: 112,
+    borderRadius: 30,
+    backgroundColor: 'rgba(26,19,12,0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(196,154,108,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 3,
-    borderColor: '#1a1410',
   },
-  title: {
-    fontSize: 38,
-    fontWeight: '700' as const,
-    color: '#fff',
-    letterSpacing: -1,
-    lineHeight: 46,
+  featureTitle: {
+    fontSize: 36,
+    lineHeight: 42,
+    fontWeight: '800',
+    color: TEXT,
+    textAlign: 'center',
+    letterSpacing: -0.8,
     marginBottom: 16,
   },
-  subtitle: {
-    fontSize: 17,
-    color: 'rgba(255,255,255,0.55)',
-    lineHeight: 26,
-    maxWidth: 300,
+  featureSubtitle: {
+    fontSize: 16,
+    lineHeight: 25,
+    color: SUBTEXT,
+    textAlign: 'center',
+    maxWidth: 320,
+    alignSelf: 'center',
   },
-  decorativeDotsContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 0,
-  },
-  decorativeDot: {
-    position: 'absolute',
-  },
-  bottomSection: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 32,
+
+  // Footer / primary CTA
+  footer: {
+    paddingHorizontal: 24,
+    paddingTop: 12,
   },
   dotsRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 6,
+    marginBottom: 18,
   },
   dot: {
-    height: 8,
+    height: 7,
     borderRadius: 4,
   },
-  nextButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  primaryBtn: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: GOLD,
+    borderRadius: 26,
+    paddingVertical: 17,
+    gap: 8,
   },
-  getStartedButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 28,
-    paddingVertical: 16,
-    borderRadius: 28,
-    gap: 10,
-  },
-  getStartedText: {
-    color: '#fff',
+  primaryBtnText: {
+    color: '#1a1208',
     fontSize: 17,
-    fontWeight: '700' as const,
+    fontWeight: '800',
+  },
+  btnDim: {
+    opacity: 0.45,
   },
 
-  quizTopBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    zIndex: 10,
-  },
-  quizBackBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  quizBackText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 15,
-    fontWeight: '600' as const,
-  },
-  quizProgressContainer: {
+  // Social proof
+  socialScroll: {
     paddingHorizontal: 24,
-    paddingTop: 20,
+    paddingTop: 24,
+    paddingBottom: 16,
+  },
+  starsRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    justifyContent: 'center',
+    gap: 4,
+    marginBottom: 16,
   },
-  quizProgressTrack: {
-    flex: 1,
-    height: 4,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 2,
-    overflow: 'hidden',
+  starsRowSm: {
+    flexDirection: 'row',
+    gap: 3,
+    marginBottom: 10,
   },
-  quizProgressFill: {
-    height: '100%',
-    backgroundColor: QUIZ_ACCENT,
-    borderRadius: 2,
+  socialTitle: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: TEXT,
+    textAlign: 'center',
+    letterSpacing: -0.6,
+    marginBottom: 8,
   },
-  quizStepLabel: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 13,
-    fontWeight: '600' as const,
-    minWidth: 32,
-    textAlign: 'right' as const,
+  socialSub: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: SUBTEXT,
+    textAlign: 'center',
+    maxWidth: 300,
+    alignSelf: 'center',
+    marginBottom: 24,
   },
+  testimonialCard: {
+    backgroundColor: CARD,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 12,
+  },
+  testimonialQuote: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: 'rgba(246,241,233,0.85)',
+    marginBottom: 12,
+  },
+  testimonialName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: TEXT,
+  },
+  testimonialHandle: {
+    fontWeight: '500',
+    color: FAINT,
+  },
+
+  // Quiz
   quizContent: {
     flex: 1,
     paddingHorizontal: 24,
-    paddingTop: 28,
+    paddingTop: 26,
   },
   quizTitle: {
-    fontSize: 32,
-    fontWeight: '700' as const,
-    color: '#fff',
+    fontSize: 30,
+    fontWeight: '800',
+    color: TEXT,
     letterSpacing: -0.5,
-    lineHeight: 40,
+    lineHeight: 38,
     marginBottom: 8,
   },
   quizSubtitle: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.45)',
-    marginBottom: 24,
-  },
-  quizOptionsScroll: {
-    flex: 1,
+    color: SUBTEXT,
+    marginBottom: 22,
   },
   quizOptionsContainer: {
     gap: 10,
@@ -1039,16 +1316,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: CARD,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: CARD_BORDER,
     borderRadius: 16,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
   quizOptionSelected: {
-    backgroundColor: 'rgba(196, 154, 108, 0.12)',
-    borderColor: 'rgba(196, 154, 108, 0.4)',
+    backgroundColor: 'rgba(196,154,108,0.13)',
+    borderColor: 'rgba(196,154,108,0.5)',
   },
   quizOptionLeft: {
     flexDirection: 'row',
@@ -1059,20 +1336,17 @@ const styles = StyleSheet.create({
   quizOptionEmoji: {
     fontSize: 26,
   },
-  quizOptionTextGroup: {
-    flex: 1,
-  },
   quizOptionLabel: {
     fontSize: 16,
-    fontWeight: '600' as const,
-    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '600',
+    color: 'rgba(246,241,233,0.82)',
   },
   quizOptionLabelSelected: {
-    color: '#fff',
+    color: TEXT,
   },
   quizOptionSub: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.35)',
+    color: FAINT,
     marginTop: 2,
   },
   quizCheckbox: {
@@ -1080,35 +1354,16 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   quizCheckboxSelected: {
-    backgroundColor: QUIZ_ACCENT,
-    borderColor: QUIZ_ACCENT,
+    backgroundColor: GOLD,
+    borderColor: GOLD,
   },
-  quizFooter: {
-    paddingHorizontal: 24,
-    paddingTop: 12,
-  },
-  quizContinueBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: QUIZ_ACCENT,
-    borderRadius: 16,
-    paddingVertical: 16,
-    gap: 8,
-  },
-  quizContinueBtnDisabled: {
-    opacity: 0.4,
-  },
-  quizContinueText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '700' as const,
-  },
+
+  // Result
   resultScroll: {
     paddingHorizontal: 24,
   },
@@ -1120,32 +1375,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
-    backgroundColor: QUIZ_ACCENT + '1A',
+    backgroundColor: 'rgba(196,154,108,0.12)',
     marginBottom: 14,
   },
   resultBadgeText: {
-    color: QUIZ_ACCENT,
+    color: GOLD,
     fontSize: 12,
-    fontWeight: '700' as const,
+    fontWeight: '700',
     letterSpacing: 1.5,
   },
   resultArchetype: {
-    color: '#fff',
+    color: TEXT,
     fontSize: 34,
-    fontWeight: '800' as const,
+    fontWeight: '800',
     letterSpacing: -1,
     marginBottom: 6,
   },
   resultTagline: {
-    color: 'rgba(255,255,255,0.6)',
+    color: SUBTEXT,
     fontSize: 16,
     marginBottom: 24,
   },
   resultCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: CARD,
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: CARD_BORDER,
     padding: 18,
     gap: 14,
   },
@@ -1158,14 +1413,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   familyLabel: {
-    color: 'rgba(255,255,255,0.85)',
+    color: 'rgba(246,241,233,0.85)',
     fontSize: 14,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   familyPct: {
-    color: 'rgba(255,255,255,0.5)',
+    color: SUBTEXT,
     fontSize: 13,
-    fontWeight: '700' as const,
+    fontWeight: '700',
   },
   familyTrack: {
     height: 8,
@@ -1178,7 +1433,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   resultDescription: {
-    color: 'rgba(255,255,255,0.65)',
+    color: 'rgba(246,241,233,0.65)',
     fontSize: 15,
     lineHeight: 23,
     marginTop: 20,
@@ -1188,12 +1443,12 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   matchesTitle: {
-    color: '#fff',
+    color: TEXT,
     fontSize: 20,
-    fontWeight: '700' as const,
+    fontWeight: '700',
   },
   matchesSub: {
-    color: 'rgba(255,255,255,0.5)',
+    color: SUBTEXT,
     fontSize: 14,
     marginTop: 2,
   },
@@ -1204,11 +1459,11 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   matchesLoadingText: {
-    color: 'rgba(255,255,255,0.5)',
+    color: SUBTEXT,
     fontSize: 14,
   },
   matchesEmpty: {
-    color: 'rgba(255,255,255,0.5)',
+    color: SUBTEXT,
     fontSize: 14,
     lineHeight: 21,
     paddingVertical: 8,
@@ -1219,16 +1474,16 @@ const styles = StyleSheet.create({
   matchRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: CARD,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: CARD_BORDER,
     padding: 10,
     gap: 12,
   },
   matchRowSelected: {
-    borderColor: QUIZ_ACCENT,
-    backgroundColor: QUIZ_ACCENT + '12',
+    borderColor: GOLD,
+    backgroundColor: 'rgba(196,154,108,0.12)',
   },
   matchImage: {
     width: 46,
@@ -1244,12 +1499,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   matchName: {
-    color: '#fff',
+    color: TEXT,
     fontSize: 15,
-    fontWeight: '600' as const,
+    fontWeight: '600',
   },
   matchBrand: {
-    color: 'rgba(255,255,255,0.5)',
+    color: SUBTEXT,
     fontSize: 13,
     marginTop: 2,
   },
@@ -1263,32 +1518,165 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   matchCheckboxSelected: {
-    backgroundColor: QUIZ_ACCENT,
-    borderColor: QUIZ_ACCENT,
+    backgroundColor: GOLD,
+    borderColor: GOLD,
   },
-  resultFooter: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
+
+  // Sign-in
+  signinTopBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    zIndex: 10,
+  },
+  signinScroll: {
     paddingHorizontal: 24,
-    paddingTop: 12,
-    backgroundColor: 'rgba(20,16,12,0.92)',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
+    paddingTop: 8,
   },
-  resultContinueBtn: {
+  signinHeroWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 110,
+    marginBottom: 8,
+  },
+  heroTileSm: {
+    width: 68,
+    height: 68,
+    borderRadius: 20,
+    backgroundColor: 'rgba(26,19,12,0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(196,154,108,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  signinTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: TEXT,
+    textAlign: 'center',
+    letterSpacing: -0.6,
+    marginBottom: 8,
+  },
+  signinSub: {
+    fontSize: 15,
+    lineHeight: 22,
+    color: SUBTEXT,
+    textAlign: 'center',
+    maxWidth: 320,
+    alignSelf: 'center',
+    marginBottom: 26,
+  },
+  appleBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: QUIZ_ACCENT,
-    borderRadius: 16,
+    backgroundColor: '#000',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 26,
     paddingVertical: 16,
-    gap: 8,
+    gap: 10,
+    marginBottom: 12,
   },
-  resultContinueText: {
+  appleBtnText: {
     color: '#fff',
-    fontSize: 17,
-    fontWeight: '700' as const,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  googleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 26,
+    paddingVertical: 16,
+    gap: 10,
+    marginBottom: 12,
+  },
+  googleBtnText: {
+    color: '#3c4043',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginVertical: 16,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  dividerText: {
+    color: FAINT,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  inputGroup: {
+    marginBottom: 12,
+  },
+  inputShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: CARD,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    borderRadius: 14,
+    paddingHorizontal: 16,
+  },
+  inputAt: {
+    color: SUBTEXT,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  inputFlex: {
+    flex: 1,
+    color: TEXT,
+    fontSize: 16,
+    paddingVertical: 15,
+  },
+  referralPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 16,
+    backgroundColor: 'rgba(196,154,108,0.12)',
+    marginBottom: 12,
+  },
+  referralText: {
+    color: GOLD,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  errorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingHorizontal: 4,
+  },
+  errorText: {
+    flex: 1,
+    color: '#ff8a8a',
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  toggleRow: {
+    alignItems: 'center',
+    paddingVertical: 18,
+  },
+  toggleText: {
+    color: SUBTEXT,
+    fontSize: 15,
+  },
+  toggleTextAccent: {
+    color: GOLD,
+    fontWeight: '700',
   },
 });

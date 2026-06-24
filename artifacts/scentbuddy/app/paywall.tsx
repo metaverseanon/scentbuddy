@@ -9,6 +9,7 @@ import {
   ScrollView,
   Animated,
   Platform,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -22,6 +23,8 @@ import { computeArchetype, ScentArchetype } from '@/lib/scent-archetype';
 import { ONBOARDING_QUIZ_KEY, QuizResults } from '@/constants/quiz';
 import { logAnalyticsEvent } from '@/lib/analytics';
 import { isWinbackEligible, markWinbackShown, incrementPaywallDismissCount } from '@/lib/winback';
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 const PRO_FEATURES = [
   { icon: '✨', title: 'For You Picks, tuned to you', desc: 'Get matched to your perfect scents from 74,000+ fragrances — the moment you log in' },
@@ -396,7 +399,8 @@ export default function PaywallScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 120 }]}
+        style={styles.scroll}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: 16 }]}
         showsVerticalScrollIndicator={false}
       >
         <Animated.View style={[styles.heroSection, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -536,7 +540,14 @@ export default function PaywallScreen() {
             </Text>
           </View>
         </View>
+      </ScrollView>
 
+      <View style={[styles.footer, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background, borderTopColor: colors.border }]}>
+        <ScrollView
+          style={styles.footerPlans}
+          contentContainerStyle={styles.footerPlansContent}
+          showsVerticalScrollIndicator={false}
+        >
         {isLoadingOfferings ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={goldAccent} />
@@ -644,9 +655,7 @@ export default function PaywallScreen() {
             })}
           </View>
         )}
-      </ScrollView>
-
-      <View style={[styles.footer, { paddingBottom: insets.bottom + 16, backgroundColor: colors.background }]}>
+        </ScrollView>
         <TouchableOpacity
           style={[styles.purchaseBtn, { backgroundColor: goldAccent, opacity: (!selectedPkg || isPurchasing) ? 0.6 : 1 }]}
           onPress={handlePurchase}
@@ -906,20 +915,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   packagesSection: {
-    gap: 10,
-    marginBottom: 20,
+    gap: 8,
+    marginBottom: 12,
   },
   sectionLabel: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700' as const,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   packageCard: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 16,
+    padding: 13,
+    borderRadius: 14,
   },
   packageLeft: {
     flexDirection: 'row',
@@ -972,13 +981,19 @@ const styles = StyleSheet.create({
   packagePeriod: {
     fontSize: 13,
   },
+  scroll: {
+    flex: 1,
+  },
   footer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  footerPlans: {
+    maxHeight: SCREEN_HEIGHT * 0.46,
+  },
+  footerPlansContent: {
+    paddingBottom: 4,
   },
   purchaseBtn: {
     flexDirection: 'row',
