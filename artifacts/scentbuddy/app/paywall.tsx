@@ -49,9 +49,9 @@ const HARDCODED_WEEKLY_PACKAGE = {
   packageType: 'WEEKLY',
   product: {
     identifier: 'sb_weekly',
-    priceString: '$2.99',
+    priceString: '2,99 €',
     price: 2.99,
-    currencyCode: 'USD',
+    currencyCode: 'EUR',
     title: 'Weekly',
     description: 'Scent Buddy Pro — Weekly',
   },
@@ -274,7 +274,11 @@ export default function PaywallScreen() {
   }, [winbackMode, source]);
 
   useEffect(() => {
-    const list = winbackMode ? winbackPackages : packages;
+    // TEMP (review screenshot only): include the hardcoded Weekly so selecting it
+    // isn't immediately reset. REMOVE with the rest of the hardcode.
+    const list = winbackMode
+      ? winbackPackages
+      : (packages.some(isWeeklyPlan) ? packages : [...packages, HARDCODED_WEEKLY_PACKAGE]);
     if (list.length === 0) return;
     // Validity is OBJECT membership, not identifier equality: the standard and
     // win-back offerings commonly reuse the same package identifiers
