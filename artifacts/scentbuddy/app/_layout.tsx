@@ -115,7 +115,7 @@ function RootLayoutNav() {
       {needsOnboarding ? (
         <OnboardingScreen onComplete={handleOnboardingComplete} />
       ) : (
-        <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
+        <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="login" options={{ headerShown: false, presentation: "modal" }} />
           <Stack.Screen name="statistics" options={{ headerShown: false, presentation: "card" }} />
