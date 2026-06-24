@@ -23,6 +23,11 @@ import { useCaptureReferralLink } from "@/lib/referralLink";
 
 const ONBOARDING_KEY = 'scentbuddy_onboarding_done';
 
+// Module-level guard so the animated splash plays at most ONCE per app launch,
+// even if RootLayoutNav remounts for any reason. Without this the splash could
+// replay (the "load screen opens ~4 times" bug).
+let splashHasPlayed = false;
+
 void SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
@@ -30,7 +35,7 @@ const queryClient = new QueryClient();
 function RootLayoutNav() {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(!splashHasPlayed);
   const [justOnboarded, setJustOnboarded] = useState(false);
   const router = useRouter();
   const navState = useRootNavigationState();
@@ -63,6 +68,7 @@ function RootLayoutNav() {
 
   const handleSplashFinish = useCallback(() => {
     console.log('Splash animation finished');
+    splashHasPlayed = true;
     setShowSplash(false);
   }, []);
 
@@ -99,36 +105,36 @@ function RootLayoutNav() {
     return null;
   }
 
-  if (needsOnboarding) {
-    return (
-      <>
-        <OnboardingScreen onComplete={handleOnboardingComplete} />
-        {showSplash && <AnimatedSplash onFinish={handleSplashFinish} />}
-      </>
-    );
-  }
-
+  // Single render path: the onboarding screen and the main Stack swap in place,
+  // and the AnimatedSplash is rendered ONCE as a top-level overlay (not inside
+  // either branch). This keeps the splash a single, stable element across the
+  // onboarding -> app transition, so switching branches can no longer unmount
+  // and replay it.
   return (
     <>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="login" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="statistics" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="fragrance-dna" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="diary" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="compare" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="scanner" options={{ headerShown: false, presentation: "fullScreenModal" }} />
-        <Stack.Screen name="user-profile" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="goals" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="referrals" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="paywall" options={{ headerShown: false, presentation: "fullScreenModal" }} />
-        <Stack.Screen name="pro-overview" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="twin-finder" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="blind-test" options={{ headerShown: false, presentation: "card" }} />
-        <Stack.Screen name="monthly-wrapped" options={{ headerShown: false, presentation: "card" }} />
-      </Stack>
-      {!showSplash && <WhatsNewModal />}
-      {!showSplash && <MilestoneCelebrationHost />}
+      {needsOnboarding ? (
+        <OnboardingScreen onComplete={handleOnboardingComplete} />
+      ) : (
+        <Stack screenOptions={{ headerShown: false, animation: "fade" }}>
+          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          <Stack.Screen name="login" options={{ headerShown: false, presentation: "modal" }} />
+          <Stack.Screen name="statistics" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="fragrance-dna" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="diary" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="compare" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="scanner" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="user-profile" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="goals" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="referrals" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="paywall" options={{ headerShown: false, presentation: "fullScreenModal" }} />
+          <Stack.Screen name="pro-overview" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="twin-finder" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="blind-test" options={{ headerShown: false, presentation: "card" }} />
+          <Stack.Screen name="monthly-wrapped" options={{ headerShown: false, presentation: "card" }} />
+        </Stack>
+      )}
+      {!needsOnboarding && !showSplash && <WhatsNewModal />}
+      {!needsOnboarding && !showSplash && <MilestoneCelebrationHost />}
       {showSplash && <AnimatedSplash onFinish={handleSplashFinish} />}
     </>
   );
