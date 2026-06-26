@@ -119,14 +119,12 @@ export default function PaywallScreen() {
     refetchOfferings,
   } = useRevenueCat();
 
-  // Weekly is intentionally excluded from the paywall: only Yearly + Monthly are
-  // offered. Filtering at the source means selection, sorting, purchase, and
-  // savings logic never see a weekly package.
-  const packages = useMemo(() => rawPackages.filter(p => !isWeeklyPlan(p)), [rawPackages]);
-  const winbackPackages = useMemo(
-    () => rawWinbackPackages.filter(p => !isWeeklyPlan(p)),
-    [rawWinbackPackages],
-  );
+  // All plans from the active offering are shown (Yearly + Monthly + Weekly).
+  // Plans render dynamically: selection, sorting (planOrder), purchase, labels,
+  // and savings logic all already handle weekly, so a weekly package added to
+  // the RevenueCat offering surfaces automatically once the build is live.
+  const packages = rawPackages;
+  const winbackPackages = rawWinbackPackages;
 
   const [selectedPkg, setSelectedPkg] = useState<PurchasesPackage | null>(null);
   const [winbackMode, setWinbackMode] = useState<boolean>(false);
