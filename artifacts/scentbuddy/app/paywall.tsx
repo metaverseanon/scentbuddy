@@ -126,10 +126,23 @@ export default function PaywallScreen() {
   const packages = rawPackages;
   const winbackPackages = rawWinbackPackages;
 
-  const [selectedPkg, setSelectedPkg] = useState<PurchasesPackage | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [winbackMode, setWinbackMode] = useState<boolean>(false);
   const winbackModeRef = useRef<boolean>(false);
   winbackModeRef.current = winbackMode;
+  // Track the selected plan by its stable identifier (string), never by object
+  // reference. RevenueCat hands back brand-new package objects on every offerings
+  // refetch (and first login fires several rapid refetches), so a reference-based
+  // selection would be invalidated every refetch and re-set in a render loop that
+  // freezes the JS thread. Deriving the package from the CURRENT list also fixes
+  // win-back mode reusing the same identifiers ($rc_annual, etc.): the resolved
+  // package always comes from the active list, so it can never be a stale
+  // standard-offering object.
+  const activeList = winbackMode ? winbackPackages : packages;
+  const selectedPkg = useMemo<PurchasesPackage | null>(
+    () => activeList.find(p => p.identifier === selectedId) ?? null,
+    [activeList, selectedId],
+  );
   const winbackShownLoggedRef = useRef<boolean>(false);
   const [launchOfferEndsAt, setLaunchOfferEndsAt] = useState<number | null>(null);
   const [now, setNow] = useState<number>(Date.now());
@@ -143,6 +156,13 @@ export default function PaywallScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
   const crownScale = useRef(new Animated.Value(0.5)).current;
+  // Precompute the staggered translateY nodes ONCE. Creating `new Animated.Value`
+  // inside the render (per feature card) leaked a fresh native node on every
+  // render, and the 1s countdown re-renders this screen continuously.
+  const featureTranslateY = useMemo(
+    () => PRO_FEATURES.map((_, i) => Animated.multiply(slideAnim, 1 + i * 0.15)),
+    [slideAnim],
+  );
 
   useEffect(() => {
     (async () => {
@@ -267,17 +287,18 @@ export default function PaywallScreen() {
   }, [winbackMode, source]);
 
   useEffect(() => {
-    const list = winbackMode ? winbackPackages : packages;
-    if (list.length === 0) return;
-    // Validity is OBJECT membership, not identifier equality: the standard and
-    // win-back offerings commonly reuse the same package identifiers
-    // (e.g. `$rc_annual`), so an identifier match would keep a stale standard
-    // package selected after switching into win-back mode.
-    const stillValid = selectedPkg != null && list.includes(selectedPkg);
-    if (stillValid) return;
-    const annual = list.find(isAnnualPlan);
-    setSelectedPkg(annual ?? list[0]);
-  }, [winbackMode, winbackPackages, packages, selectedPkg]);
+    if (activeList.length === 0) return;
+    // Validity is checked by IDENTIFIER, and the selected package is derived from
+    // the current `activeList` (see above). Identifier equality survives RevenueCat
+    // refetches that mint new package objects, so we don't re-select on every
+    // refetch (which previously froze the JS thread on first login). Switching into
+    // win-back mode keeps the same identifier but re-resolves the object from the
+    // win-back list, so the stale-standard-package concern no longer applies.
+    if (selectedId != null && activeList.some(p => p.identifier === selectedId)) return;
+    const annual = activeList.find(isAnnualPlan);
+    const fallback = annual ?? activeList[0];
+    if (fallback) setSelectedId(fallback.identifier);
+  }, [activeList, selectedId]);
 
   useEffect(() => {
     if (isPro) {
@@ -524,7 +545,7 @@ export default function PaywallScreen() {
                   backgroundColor: colors.card,
                   borderColor: colors.border,
                   opacity: fadeAnim,
-                  transform: [{ translateY: Animated.multiply(slideAnim, new Animated.Value(1 + i * 0.15)) }],
+                  transform: [{ translateY: featureTranslateY[i] }],
                 },
               ]}
             >
@@ -617,7 +638,7 @@ export default function PaywallScreen() {
                     },
                   ]}
                   onPress={() => {
-                    setSelectedPkg(pkg);
+                    setSelectedId(pkg.identifier);
                     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   }}
                   activeOpacity={0.8}
