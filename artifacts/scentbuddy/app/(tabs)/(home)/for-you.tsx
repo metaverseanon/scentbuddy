@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  Modal,
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -68,14 +67,13 @@ function seededShuffle<T>(arr: T[], seed: string): T[] {
 }
 
 export default function ForYouScreen() {
-  const { user, profile, updateProfile } = useAuth();
+  const { user, profile } = useAuth();
   const { colors } = useTheme();
   const { isPro } = useRevenueCat();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-  const [showQuiz, setShowQuiz] = useState(false);
   const [similarSource, setSimilarSource] = useState<CollectionItem | null>(null);
   const [similarResults, setSimilarResults] = useState<(SearchResult & { matchPct: number; sharedNotes: string[] })[]>([]);
   const [similarLoading, setSimilarLoading] = useState(false);
@@ -595,7 +593,7 @@ export default function ForYouScreen() {
           <Text style={[styles.title, { color: colors.text }]}>For You</Text>
           <TouchableOpacity
             style={[styles.quizBtn, { borderColor: colors.border }]}
-            onPress={() => setShowQuiz(true)}
+            onPress={() => router.push('/scent-quiz')}
           >
             <Sparkle size={14} color={colors.accent} />
             <Text style={[styles.quizBtnText, { color: colors.accent }]}>Take Quiz</Text>
@@ -1108,158 +1106,6 @@ export default function ForYouScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={showQuiz} animationType="slide" presentationStyle="pageSheet">
-        <QuizModal
-          onClose={() => setShowQuiz(false)}
-          onSave={(results) => {
-            if (user) {
-              void updateProfile({
-                scent_quiz: results,
-                favorite_note: results.favoriteNotes?.[0] ?? null,
-              }).catch((e) => console.log('[for-you] Failed to persist quiz results:', e));
-            }
-            void queryClient.invalidateQueries({ queryKey: ['quiz-results'] });
-            void queryClient.invalidateQueries({ queryKey: ['recommendations'] });
-          }}
-        />
-      </Modal>
-    </View>
-  );
-}
-
-function QuizModal({ onClose, onSave }: { onClose: () => void; onSave: (results: QuizResults) => void }) {
-  const { colors } = useTheme();
-  const [step, setStep] = useState(0);
-  const [selections, setSelections] = useState<string[][]>([[], [], [], []]);
-
-  const steps = [
-    {
-      title: 'Which scent families appeal to you?',
-      subtitle: "Pick all that you're drawn to",
-      options: [
-        { emoji: '🍋', label: 'Fresh & Citrus', sub: 'Clean, bright, zesty' },
-        { emoji: '🌹', label: 'Floral', sub: 'Romantic, feminine, blooming' },
-        { emoji: '🌲', label: 'Woody & Earthy', sub: 'Deep, grounded, natural' },
-        { emoji: '🕌', label: 'Warm & Oriental', sub: 'Rich, exotic, sensual' },
-        { emoji: '🌶️', label: 'Spicy', sub: 'Bold, warming, intense' },
-        { emoji: '🍫', label: 'Gourmand', sub: 'Sweet, edible, indulgent' },
-        { emoji: '🪵', label: 'Oud & Leather', sub: 'Smoky, animalic, luxurious' },
-        { emoji: '🌊', label: 'Aquatic & Green', sub: 'Cool, fresh, outdoorsy' },
-      ],
-    },
-    {
-      title: 'What notes do you love?',
-      subtitle: 'Pick your favorites',
-      options: [
-        { emoji: '🫐', label: 'Vanilla' }, { emoji: '🌹', label: 'Rose' },
-        { emoji: '🍊', label: 'Bergamot' }, { emoji: '🪵', label: 'Sandalwood' },
-        { emoji: '🌿', label: 'Vetiver' }, { emoji: '🍯', label: 'Amber' },
-        { emoji: '🌸', label: 'Jasmine' }, { emoji: '🔥', label: 'Oud' },
-      ],
-    },
-    {
-      title: 'When do you usually wear fragrance?',
-      subtitle: 'Select your main occasions',
-      options: [
-        { emoji: '💼', label: 'Office' }, { emoji: '🌙', label: 'Date Night' },
-        { emoji: '☀️', label: 'Everyday' }, { emoji: '🎉', label: 'Special Events' },
-        { emoji: '🏖️', label: 'Summer Days' }, { emoji: '❄️', label: 'Winter Nights' },
-      ],
-    },
-    {
-      title: 'What matters most to you?',
-      subtitle: 'Choose your priorities',
-      options: [
-        { emoji: '⏳', label: 'Long lasting' }, { emoji: '💨', label: 'Strong projection' },
-        { emoji: '🤫', label: 'Subtle & intimate' }, { emoji: '💎', label: 'Unique & niche' },
-        { emoji: '💰', label: 'Great value' }, { emoji: '🎯', label: 'Versatile' },
-      ],
-    },
-  ];
-
-  const toggleSelection = (label: string) => {
-    setSelections(prev => {
-      const current = [...prev];
-      const stepSel = [...current[step]];
-      if (stepSel.includes(label)) {
-        current[step] = stepSel.filter(s => s !== label);
-      } else {
-        current[step] = [...stepSel, label];
-      }
-      return current;
-    });
-  };
-
-  return (
-    <View style={[styles.quizContainer, { backgroundColor: colors.background }]}>
-      <View style={[styles.quizHeader, { borderBottomColor: colors.border }]}>
-        <Text style={[styles.quizTitle, { color: colors.text }]}>Scent Quiz</Text>
-        <TouchableOpacity onPress={onClose}>
-          <X size={24} color={colors.text} />
-        </TouchableOpacity>
-      </View>
-
-      <View style={[styles.progressBar, { backgroundColor: colors.chip }]}>
-        <View style={[styles.progressFill, { backgroundColor: colors.accent, width: `${((step + 1) / steps.length) * 100}%` }]} />
-      </View>
-
-      <ScrollView contentContainerStyle={styles.quizContent}>
-        <Text style={[styles.stepLabel, { color: colors.accent }]}>Step {step + 1} of {steps.length}</Text>
-        <Text style={[styles.quizQuestion, { color: colors.text }]}>{steps[step].title}</Text>
-        <Text style={[styles.quizSubtitle, { color: colors.subtext }]}>{steps[step].subtitle}</Text>
-
-        <View style={styles.quizOptions}>
-          {steps[step].options.map(opt => {
-            const selected = selections[step].includes(opt.label);
-            return (
-              <TouchableOpacity
-                key={opt.label}
-                style={[styles.quizOption, {
-                  backgroundColor: selected ? colors.accent + '15' : colors.card,
-                  borderColor: selected ? colors.accent : colors.border,
-                }]}
-                onPress={() => toggleSelection(opt.label)}
-              >
-                <Text style={styles.quizOptionEmoji}>{opt.emoji}</Text>
-                <Text style={[styles.quizOptionLabel, { color: colors.text }]}>{opt.label}</Text>
-                {'sub' in opt && opt.sub && (
-                  <Text style={[styles.quizOptionSub, { color: colors.subtext }]}>{opt.sub}</Text>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </ScrollView>
-
-      <View style={[styles.quizFooter, { borderTopColor: colors.border }]}>
-        {step > 0 && (
-          <TouchableOpacity style={[styles.quizBackBtn, { borderColor: colors.border }]} onPress={() => setStep(step - 1)}>
-            <Text style={[styles.quizBackText, { color: colors.text }]}>Back</Text>
-          </TouchableOpacity>
-        )}
-        <TouchableOpacity
-          style={[styles.quizNextBtn, { backgroundColor: colors.accent, flex: step === 0 ? 1 : undefined }]}
-          onPress={() => {
-            if (step < steps.length - 1) {
-              setStep(step + 1);
-            } else {
-              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              const results: QuizResults = {
-                scentFamilies: selections[0],
-                favoriteNotes: selections[1],
-                occasions: selections[2],
-                priorities: selections[3],
-                completedAt: new Date().toISOString(),
-              };
-              void AsyncStorage.setItem(ONBOARDING_QUIZ_KEY, JSON.stringify(results));
-              onSave(results);
-              onClose();
-            }
-          }}
-        >
-          <Text style={styles.quizNextText}>{step === steps.length - 1 ? 'Finish' : 'Next'}</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }

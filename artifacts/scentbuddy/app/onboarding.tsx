@@ -53,6 +53,7 @@ import { computeArchetype, ScentArchetype } from '@/lib/scent-archetype';
 import { searchFragrances, forceHttps, supabase } from '@/lib/supabase';
 import { useAuth } from '@/providers/AuthProvider';
 import { getPendingReferralCode } from '@/lib/referralLink';
+import ScentQuiz from '@/components/ScentQuiz';
 
 interface FragranceMatch {
   name: string;
@@ -203,11 +204,6 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
   const [phase, setPhase] = useState<Phase>('features');
   const [featureIndex, setFeatureIndex] = useState(0);
 
-  const [flowIndex, setFlowIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string[]>>({});
-  // One navigation per render — blocks rapid multi-taps from skipping steps
-  // or pushing flowIndex out of bounds. Reset whenever the step changes.
-  const navLock = useRef(false);
   const [archetype, setArchetype] = useState<ScentArchetype | null>(null);
   const [matches, setMatches] = useState<FragranceMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
@@ -241,8 +237,6 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
   const heroAnim = useRef(new Animated.Value(0)).current;
   const contentAnim = useRef(new Animated.Value(0)).current;
   const glowPulse = useRef(new Animated.Value(0)).current;
-  const quizFade = useRef(new Animated.Value(0)).current;
-  const quizSlide = useRef(new Animated.Value(24)).current;
   const resultFade = useRef(new Animated.Value(0)).current;
   const resultSlide = useRef(new Animated.Value(24)).current;
   const signinFade = useRef(new Animated.Value(0)).current;
@@ -295,18 +289,6 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
       animateFocal();
     }
   }, [phase, featureIndex, animateFocal]);
-
-  useEffect(() => {
-    navLock.current = false;
-    if (phase === 'quiz') {
-      quizFade.setValue(0);
-      quizSlide.setValue(24);
-      Animated.parallel([
-        Animated.timing(quizFade, { toValue: 1, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-        Animated.timing(quizSlide, { toValue: 0, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      ]).start();
-    }
-  }, [phase, flowIndex, quizFade, quizSlide]);
 
   useEffect(() => {
     if (phase === 'result') {
@@ -371,7 +353,6 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 
   const startQuiz = useCallback(() => {
     if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setFlowIndex(0);
     setPhase('quiz');
   }, []);
 
@@ -410,30 +391,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     }
   }, []);
 
-  const goToResult = useCallback(async () => {
-    if (Platform.OS !== 'web') {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    }
-    const a = answers;
-    const results: QuizResults = {
-      scentFamilies: a['scentFamilies'] ?? [],
-      favoriteNotes: a['favoriteNotes'] ?? [],
-      occasions: a['occasions'] ?? [],
-      priorities: a['priorities'] ?? [],
-      experienceLevel: a['experienceLevel']?.[0] ?? null,
-      collectionSize: a['collectionSize']?.[0] ?? null,
-      struggles: a['struggles'] ?? [],
-      discoveryStyle: a['discoveryStyle']?.[0] ?? null,
-      intensity: a['intensity']?.[0] ?? null,
-      personality: a['personality'] ?? [],
-      seasons: a['seasons'] ?? [],
-      goals: a['goals'] ?? [],
-      budget: a['budget']?.[0] ?? null,
-      adventurousness: a['adventurousness']?.[0] ?? null,
-      signatureStatus: a['signatureStatus']?.[0] ?? null,
-      gender: a['gender']?.[0] ?? null,
-      completedAt: new Date().toISOString(),
-    };
+  const handleQuizComplete = useCallback(async (results: QuizResults) => {
     try {
       await AsyncStorage.setItem(ONBOARDING_QUIZ_KEY, JSON.stringify(results));
     } catch (e) {
@@ -443,48 +401,13 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     setArchetype(computed);
     setPhase('result');
     void fetchMatches(computed.searchSeeds);
-  }, [answers, fetchMatches]);
+  }, [fetchMatches]);
 
   const toggleOwned = useCallback((match: FragranceMatch) => {
     haptic();
     const key = `${match.name}|${match.brand}`;
     setOwnedPicks((prev) => ({ ...prev, [key]: !prev[key] }));
   }, [haptic]);
-
-  const toggleAnswer = useCallback((key: string, label: string, type: QuizQuestionType) => {
-    haptic();
-    setAnswers((prev) => {
-      const cur = prev[key] ?? [];
-      if (type === 'single') {
-        return { ...prev, [key]: [label] };
-      }
-      if (cur.includes(label)) {
-        return { ...prev, [key]: cur.filter((s) => s !== label) };
-      }
-      return { ...prev, [key]: [...cur, label] };
-    });
-  }, [haptic]);
-
-  const flowNext = useCallback(() => {
-    if (navLock.current) return;
-    navLock.current = true;
-    haptic();
-    if (flowIndex < QUIZ_FLOW.length - 1) {
-      setFlowIndex((i) => Math.min(i + 1, QUIZ_FLOW.length - 1));
-    } else {
-      void goToResult();
-    }
-  }, [flowIndex, goToResult, haptic]);
-
-  const flowBack = useCallback(() => {
-    if (navLock.current) return;
-    navLock.current = true;
-    if (flowIndex > 0) {
-      setFlowIndex((i) => Math.max(i - 1, 0));
-    } else {
-      setPhase('social');
-    }
-  }, [flowIndex]);
 
   // ---- Flow to sign-in ----
   const saveStarterPicks = useCallback(async () => {
@@ -958,289 +881,12 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 
   // ===================== QUIZ =====================
   if (phase === 'quiz') {
-    const step = QUIZ_FLOW[flowIndex];
-    if (!step) return null;
-    const progress = ((flowIndex + 1) / QUIZ_FLOW.length) * 100;
-    const questionSel = step.kind === 'question' ? (answers[step.key] ?? []) : [];
-    const minReq = step.kind === 'question' ? (QUESTION_BY_KEY[step.key].min ?? 1) : 0;
-    const canAdvance = step.kind !== 'question' || questionSel.length >= minReq;
-    const questionNo = QUIZ_FLOW.slice(0, flowIndex + 1).filter((f) => f.kind === 'question').length;
-
-    let ctaLabel = 'Continue';
-    let ctaSparkle = false;
-    if (step.kind === 'interstitial') {
-      if (step.id === 'summary') {
-        ctaLabel = 'Reveal my Scent DNA';
-        ctaSparkle = true;
-      } else if (step.id === 'solution') {
-        ctaLabel = 'I want this';
-      } else if (step.id === 'gap') {
-        ctaLabel = 'Show me the plan';
-      }
-    }
-
-    // Answer-derived values for the narrative interstitials.
-    const exp = (answers['experienceLevel'] ?? [])[0];
-    const col = (answers['collectionSize'] ?? [])[0];
-    const discovery = (answers['discoveryStyle'] ?? [])[0];
-    const struggles = answers['struggles'] ?? [];
-    const goals = answers['goals'] ?? [];
-    const families = answers['scentFamilies'] ?? [];
-    const notes = answers['favoriteNotes'] ?? [];
-    const personality = answers['personality'] ?? [];
-    const seasons = answers['seasons'] ?? [];
-    const occasions = answers['occasions'] ?? [];
-    const intensity = (answers['intensity'] ?? [])[0];
-    const budget = (answers['budget'] ?? [])[0];
-    const adventurousness = (answers['adventurousness'] ?? [])[0];
-    const gender = (answers['gender'] ?? [])[0];
-
-    const summaryGroups = [
-      { label: 'Loves', items: families },
-      { label: 'Notes', items: notes },
-      { label: 'Vibe', items: personality },
-      { label: 'Seasons', items: seasons },
-      { label: 'Wears for', items: occasions },
-      { label: 'Style', items: [intensity, budget, adventurousness, gender].filter(Boolean) as string[] },
-      { label: 'Goals', items: goals },
-    ];
-
     return (
-      <View style={styles.container}>
-        <Backdrop />
-        <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
-          <TouchableOpacity onPress={flowBack} style={styles.iconBtn} hitSlop={10}>
-            <CaretLeft size={20} color={SUBTEXT} weight="bold" />
-          </TouchableOpacity>
-          <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
-          </View>
-          <TouchableOpacity onPress={skipToSignin} style={styles.skipBtn} hitSlop={10}>
-            <Text style={styles.skipText}>Skip</Text>
-          </TouchableOpacity>
-        </View>
-
-        <Animated.View style={[styles.quizContent, { opacity: quizFade, transform: [{ translateY: quizSlide }] }]}>
-          {step.kind === 'question' ? (
-            (() => {
-              const q = QUESTION_BY_KEY[step.key];
-              return (
-                <>
-                  <Text style={styles.quizEyebrow}>
-                    {q.part} · {questionNo} OF {QUIZ_QUESTION_COUNT}
-                  </Text>
-                  <Text style={styles.quizTitle}>{q.title}</Text>
-                  <Text style={styles.quizSubtitle}>{q.subtitle}</Text>
-
-                  <ScrollView
-                    style={styles.flex}
-                    contentContainerStyle={styles.quizOptionsContainer}
-                    showsVerticalScrollIndicator={false}
-                  >
-                    {q.options.map((opt) => {
-                      const selected = questionSel.includes(opt.label);
-                      return (
-                        <TouchableOpacity
-                          key={opt.label}
-                          style={[styles.quizOption, selected && styles.quizOptionSelected]}
-                          onPress={() => toggleAnswer(q.key, opt.label, q.type)}
-                          activeOpacity={0.8}
-                        >
-                          <View style={styles.quizOptionLeft}>
-                            <Text style={styles.quizOptionEmoji}>{opt.emoji}</Text>
-                            <View style={styles.flex}>
-                              <Text style={[styles.quizOptionLabel, selected && styles.quizOptionLabelSelected]}>
-                                {opt.label}
-                              </Text>
-                              {opt.sub ? <Text style={styles.quizOptionSub}>{opt.sub}</Text> : null}
-                            </View>
-                          </View>
-                          {q.type === 'single' ? (
-                            <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
-                              {selected ? <View style={styles.radioInner} /> : null}
-                            </View>
-                          ) : (
-                            <View style={[styles.quizCheckbox, selected && styles.quizCheckboxSelected]}>
-                              {selected ? <Check size={14} color="#1a1208" weight="bold" /> : null}
-                            </View>
-                          )}
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                </>
-              );
-            })()
-          ) : (
-            <ScrollView
-              style={styles.flex}
-              contentContainerStyle={styles.interScrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              {step.id === 'status' && (
-                <>
-                  <View style={styles.interBadge}>
-                    <MapPin size={14} color={GOLD} weight="fill" />
-                    <Text style={styles.interBadgeText}>WHERE YOU ARE TODAY</Text>
-                  </View>
-                  <Text style={styles.interTitle}>Here&apos;s your{'\n'}starting point</Text>
-                  <Text style={styles.interSub}>Everything after this is built around exactly this.</Text>
-
-                  <View style={styles.interCard}>
-                    {exp ? (
-                      <View style={styles.interRow}>
-                        <Text style={styles.interRowLabel}>Experience</Text>
-                        <Text style={styles.interRowValue}>{exp}</Text>
-                      </View>
-                    ) : null}
-                    {col ? (
-                      <>
-                        <View style={styles.interDivider} />
-                        <View style={styles.interRow}>
-                          <Text style={styles.interRowLabel}>Collection</Text>
-                          <Text style={styles.interRowValue}>{col} fragrances</Text>
-                        </View>
-                      </>
-                    ) : null}
-                    {discovery ? (
-                      <>
-                        <View style={styles.interDivider} />
-                        <View style={styles.interRow}>
-                          <Text style={styles.interRowLabel}>Finds scents via</Text>
-                          <Text style={styles.interRowValue}>{discovery}</Text>
-                        </View>
-                      </>
-                    ) : null}
-                  </View>
-
-                  {struggles.length > 0 && (
-                    <>
-                      <Text style={styles.interSectionLabel}>What&apos;s holding you back</Text>
-                      <View style={styles.struggleList}>
-                        {struggles.map((str) => (
-                          <View key={str} style={styles.struggleRow}>
-                            <WarningCircle size={18} color="#e8a87c" weight="fill" />
-                            <Text style={styles.struggleText}>{str}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    </>
-                  )}
-                </>
-              )}
-
-              {step.id === 'gap' && (
-                <>
-                  <View style={styles.interBadge}>
-                    <TrendUp size={14} color={GOLD} weight="fill" />
-                    <Text style={styles.interBadgeText}>THE GAP</Text>
-                  </View>
-                  <Text style={styles.interTitle}>From where you are{'\n'}to where you want to be</Text>
-
-                  <View style={styles.gapBlock}>
-                    <Text style={styles.gapBlockLabel}>TODAY</Text>
-                    <Text style={styles.gapBlockText}>
-                      {[col ? `${col} bottles` : null, exp ? exp.toLowerCase() : null]
-                        .filter(Boolean)
-                        .join(' · ') || 'Just getting started'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.gapArrow}>
-                    <ArrowDown size={22} color={GOLD} weight="bold" />
-                  </View>
-
-                  <View style={styles.gapBlockGold}>
-                    <Text style={styles.gapBlockLabelGold}>WHERE YOU WANT TO BE</Text>
-                    <Text style={styles.gapBlockTextGold}>
-                      {goals.length ? goals.slice(0, 2).join(' · ') : 'A collection that feels like you'}
-                    </Text>
-                  </View>
-
-                  <View style={styles.gapCallout}>
-                    <Text style={styles.gapCalloutText}>
-                      That distance is the gap — and closing it by guessing alone is slow and expensive.
-                      ScentBuddy gets you there faster.
-                    </Text>
-                  </View>
-                </>
-              )}
-
-              {step.id === 'solution' && (
-                <>
-                  <View style={styles.interBadge}>
-                    <Sparkle size={14} color={GOLD} weight="fill" />
-                    <Text style={styles.interBadgeText}>YOUR PERSONAL PLAN</Text>
-                  </View>
-                  <Text style={styles.interTitle}>How ScentBuddy{'\n'}closes your gap</Text>
-                  <Text style={styles.interSub}>Built from your answers — not a generic tour.</Text>
-
-                  <View style={styles.solutionList}>
-                    {buildSolutions(struggles, goals).map((r) => {
-                      const Icon = r.icon;
-                      return (
-                        <View key={r.title} style={styles.solutionRow}>
-                          <View style={styles.solutionIcon}>
-                            <Icon size={22} color={GOLD} weight="duotone" />
-                          </View>
-                          <View style={styles.flex}>
-                            <Text style={styles.solutionTitle}>{r.title}</Text>
-                            <Text style={styles.solutionDesc}>{r.desc}</Text>
-                          </View>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </>
-              )}
-
-              {step.id === 'summary' && (
-                <>
-                  <View style={styles.interBadge}>
-                    <Sparkle size={14} color={GOLD} weight="fill" />
-                    <Text style={styles.interBadgeText}>YOUR SCENT SNAPSHOT</Text>
-                  </View>
-                  <Text style={styles.interTitle}>This is you,{'\n'}in fragrance</Text>
-                  <Text style={styles.interSub}>
-                    Everything you told us, in one place. Ready for your Scent DNA?
-                  </Text>
-
-                  {summaryGroups.map((grp) =>
-                    grp.items.length ? (
-                      <View key={grp.label} style={styles.summaryGroup}>
-                        <Text style={styles.summaryGroupLabel}>{grp.label}</Text>
-                        <View style={styles.chipWrap}>
-                          {grp.items.map((it) => (
-                            <View key={it} style={styles.chip}>
-                              <Text style={styles.chipText}>{it}</Text>
-                            </View>
-                          ))}
-                        </View>
-                      </View>
-                    ) : null,
-                  )}
-                </>
-              )}
-            </ScrollView>
-          )}
-        </Animated.View>
-
-        <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
-          <TouchableOpacity
-            style={[styles.primaryBtn, !canAdvance && styles.btnDim]}
-            onPress={flowNext}
-            disabled={!canAdvance}
-            activeOpacity={0.9}
-          >
-            <Text style={styles.primaryBtnText}>{ctaLabel}</Text>
-            {ctaSparkle ? (
-              <Sparkle size={18} color="#1a1208" weight="fill" />
-            ) : (
-              <ArrowRight size={18} color="#1a1208" weight="bold" />
-            )}
-          </TouchableOpacity>
-        </View>
-      </View>
+      <ScentQuiz
+        onComplete={handleQuizComplete}
+        onExit={() => setPhase('social')}
+        onSkip={skipToSignin}
+      />
     );
   }
 
