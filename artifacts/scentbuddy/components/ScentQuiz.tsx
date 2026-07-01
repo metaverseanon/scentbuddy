@@ -297,6 +297,7 @@ export default function ScentQuiz({
                 >
                   {q.options.map((opt) => {
                     const selected = questionSel.includes(opt.label);
+                    const OptIcon = opt.icon;
                     return (
                       <TouchableOpacity
                         key={opt.label}
@@ -305,7 +306,9 @@ export default function ScentQuiz({
                         activeOpacity={0.8}
                       >
                         <View style={styles.quizOptionLeft}>
-                          <Text style={styles.quizOptionEmoji}>{opt.emoji}</Text>
+                          <View style={[styles.quizOptionIcon, selected && styles.quizOptionIconSelected]}>
+                            <OptIcon size={20} color={selected ? GOLD_LIGHT : GOLD} weight="duotone" />
+                          </View>
                           <View style={styles.flex}>
                             <Text style={[styles.quizOptionLabel, selected && styles.quizOptionLabelSelected]}>
                               {opt.label}
@@ -643,8 +646,19 @@ const styles = StyleSheet.create({
     gap: 14,
     flex: 1,
   },
-  quizOptionEmoji: {
-    fontSize: 26,
+  quizOptionIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(196,154,108,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(196,154,108,0.20)',
+  },
+  quizOptionIconSelected: {
+    backgroundColor: 'rgba(196,154,108,0.20)',
+    borderColor: 'rgba(196,154,108,0.45)',
   },
   quizOptionLabel: {
     fontSize: 16,
