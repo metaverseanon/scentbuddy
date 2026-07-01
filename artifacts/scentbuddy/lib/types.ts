@@ -1,3 +1,5 @@
+import type { QuizResults } from '@/constants/quiz';
+
 export interface Profile {
   id: string;
   email: string;
@@ -5,6 +7,7 @@ export interface Profile {
   username: string | null;
   bio: string | null;
   favorite_note: string | null;
+  scent_quiz: QuizResults | null;
   avatar_emoji: string | null;
   avatar_url: string | null;
   is_pro: boolean;

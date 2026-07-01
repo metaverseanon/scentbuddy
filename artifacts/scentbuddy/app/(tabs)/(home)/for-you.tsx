@@ -68,7 +68,7 @@ function seededShuffle<T>(arr: T[], seed: string): T[] {
 }
 
 export default function ForYouScreen() {
-  const { user, profile } = useAuth();
+  const { user, profile, updateProfile } = useAuth();
   const { colors } = useTheme();
   const { isPro } = useRevenueCat();
   const insets = useSafeAreaInsets();
@@ -1111,7 +1111,13 @@ export default function ForYouScreen() {
       <Modal visible={showQuiz} animationType="slide" presentationStyle="pageSheet">
         <QuizModal
           onClose={() => setShowQuiz(false)}
-          onSave={() => {
+          onSave={(results) => {
+            if (user) {
+              void updateProfile({
+                scent_quiz: results,
+                favorite_note: results.favoriteNotes?.[0] ?? null,
+              }).catch((e) => console.log('[for-you] Failed to persist quiz results:', e));
+            }
             void queryClient.invalidateQueries({ queryKey: ['quiz-results'] });
             void queryClient.invalidateQueries({ queryKey: ['recommendations'] });
           }}
