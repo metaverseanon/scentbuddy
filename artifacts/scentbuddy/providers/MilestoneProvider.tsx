@@ -5,6 +5,7 @@ import createContextHook from '@nkzw/create-context-hook';
 import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import { useAuth } from '@/providers/AuthProvider';
 import { logAnalyticsEvent } from '@/lib/analytics';
+import { openPaywallOnce } from '@/lib/paywallGuard';
 import MilestoneCelebration from '@/components/MilestoneCelebration';
 
 export const COLLECTION_MILESTONE = 5;
@@ -154,7 +155,7 @@ export const [MilestoneProvider, useMilestones] = createContextHook(() => {
     if (!a) return;
     const cfg = MILESTONE_CONFIG[a];
     void logAnalyticsEvent('milestone_celebration_continue', { milestone: a, source: cfg.source });
-    router.push({ pathname: '/paywall', params: { source: cfg.source } });
+    openPaywallOnce(() => router.push({ pathname: '/paywall', params: { source: cfg.source } }));
   }, [router]);
 
   const handleDismiss = useCallback(() => {

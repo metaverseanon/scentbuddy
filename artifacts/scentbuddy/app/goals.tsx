@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { openPaywallOnce } from '@/lib/paywallGuard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -395,7 +396,7 @@ export default function GoalsScreen() {
     onError: (error: Error) => {
       Alert.alert('Upgrade to Pro', error.message, [
         { text: 'Not Now', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => router.push('/paywall?source=limit_goals' as any) },
+        { text: 'Upgrade', onPress: () => openPaywallOnce(() => router.push('/paywall?source=limit_goals' as any)) },
       ]);
     },
   });
@@ -445,7 +446,7 @@ export default function GoalsScreen() {
         `Free accounts can have ${FREE_GOAL_LIMIT} active goal. Upgrade to Pro for unlimited goals!`,
         [
           { text: 'Not Now', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => router.push('/paywall?source=limit_goals' as any) },
+          { text: 'Upgrade', onPress: () => openPaywallOnce(() => router.push('/paywall?source=limit_goals' as any)) },
         ]
       );
       return;

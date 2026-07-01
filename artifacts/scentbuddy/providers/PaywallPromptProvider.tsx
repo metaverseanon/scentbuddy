@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'expo-router';
 import createContextHook from '@nkzw/create-context-hook';
 import { useRevenueCat } from '@/providers/RevenueCatProvider';
 import { useAuth } from '@/providers/AuthProvider';
+import { openPaywallOnce, isPaywallOpen } from '@/lib/paywallGuard';
 
 const LAST_SHOWN_KEY = 'paywall_last_shown_at';
 const OPEN_COUNT_KEY = 'paywall_open_count';
@@ -35,6 +36,7 @@ export const [PaywallPromptProvider, usePaywallPrompt] = createContextHook(() =>
   }, []);
 
   const isEligible = useCallback(() => {
+    if (isPaywallOpen()) return false;
     if (isPro) return false;
     if (!session) return false;
     if (authLoading) return false;
@@ -72,10 +74,19 @@ export const [PaywallPromptProvider, usePaywallPrompt] = createContextHook(() =>
         return false;
       }
 
+      const shown = openPaywallOnce(() =>
+        router.push({ pathname: '/paywall', params: { source: trigger } })
+      );
+      if (!shown) {
+        // A paywall opened between the eligibility check and here (rare race).
+        // Roll back the open-count we just consumed so cadence isn't skewed.
+        await AsyncStorage.setItem(OPEN_COUNT_KEY, String(count));
+        console.log('[PaywallPrompt] A paywall is already open, skipping');
+        return false;
+      }
       await AsyncStorage.setItem(OPEN_COUNT_KEY, '0');
       await AsyncStorage.setItem(LAST_SHOWN_KEY, String(now));
       console.log('[PaywallPrompt] Showing paywall (trigger:', trigger, ')');
-      router.push({ pathname: '/paywall', params: { source: trigger } });
       return true;
     } catch (e) {
       console.log('[PaywallPrompt] Error:', e);
@@ -113,7 +124,9 @@ export const [PaywallPromptProvider, usePaywallPrompt] = createContextHook(() =>
   return useMemo(() => ({
     showPaywallIfEligible: () => maybeShow('manual'),
     openPaywall: (source: string = 'manual') =>
-      router.push({ pathname: '/paywall', params: { source } }),
+      openPaywallOnce(() =>
+        router.push({ pathname: '/paywall', params: { source } })
+      ),
     suppressForegroundFor,
   }), [maybeShow, router, suppressForegroundFor]);
 });

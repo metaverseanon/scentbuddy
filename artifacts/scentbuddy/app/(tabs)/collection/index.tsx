@@ -18,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { openPaywallOnce } from '@/lib/paywallGuard';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -377,7 +378,7 @@ function CollectionScreenInner() {
                   'The Shelf view is available for Pro users. Upgrade to unlock it!',
                   [
                     { text: 'Not Now', style: 'cancel' },
-                    { text: 'Upgrade', onPress: () => router.push('/paywall') },
+                    { text: 'Upgrade', onPress: () => openPaywallOnce(() => router.push('/paywall')) },
                   ]
                 );
                 return;
@@ -670,7 +671,7 @@ function AddPerfumeModal({ visible, onClose, userId, isPro, collectionCount }: {
         onClose();
         Alert.alert('Pro Feature', err.message, [
           { text: 'Not Now', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => router.push('/paywall?source=limit_collection') },
+          { text: 'Upgrade', onPress: () => openPaywallOnce(() => router.push('/paywall?source=limit_collection')) },
         ]);
       } else {
         Alert.alert('Error', err.message);

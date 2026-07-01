@@ -19,6 +19,7 @@ import { initAppsFlyer } from "@/lib/appsflyer";
 import { initTikTok } from "@/lib/tiktok";
 import { initMeta } from "@/lib/meta";
 import { useCaptureReferralLink } from "@/lib/referralLink";
+import { openPaywallOnce } from "@/lib/paywallGuard";
 
 
 const ONBOARDING_KEY = 'scentbuddy_onboarding_done';
@@ -92,7 +93,9 @@ function RootLayoutNav() {
     if (!navState?.key) return;
     const id = setTimeout(() => {
       try {
-        router.push({ pathname: '/paywall', params: { source: 'onboarding' } });
+        openPaywallOnce(() =>
+          router.push({ pathname: '/paywall', params: { source: 'onboarding' } })
+        );
       } catch (e) {
         console.log('Failed to open paywall after onboarding:', e);
       }

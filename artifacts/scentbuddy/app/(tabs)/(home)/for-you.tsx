@@ -10,6 +10,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { openPaywallOnce } from '@/lib/paywallGuard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CaretLeft, Sparkle, Heart, CaretDown, CaretUp, X, Star } from 'phosphor-react-native';
@@ -668,7 +669,7 @@ export default function ForYouScreen() {
               </Text>
               <TouchableOpacity
                 style={[styles.proGateBtn, { backgroundColor: colors.accent, paddingHorizontal: 28 }]}
-                onPress={() => router.push('/paywall?source=limit_smartpicks')}
+                onPress={() => openPaywallOnce(() => router.push('/paywall?source=limit_smartpicks'))}
               >
                 <Crown size={16} color="#fff" weight="fill" />
                 <Text style={styles.proGateBtnText}>See My Matches</Text>
@@ -797,7 +798,7 @@ export default function ForYouScreen() {
               style={[styles.proGateBtn, { backgroundColor: colors.accent }]}
               onPress={() => {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                router.push('/paywall?source=limit_smartpicks' as any);
+                openPaywallOnce(() => router.push('/paywall?source=limit_smartpicks' as any));
               }}
               activeOpacity={0.8}
             >

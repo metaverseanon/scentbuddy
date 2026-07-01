@@ -10,6 +10,7 @@ import {
   Share,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { openPaywallOnce } from '@/lib/paywallGuard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import { CaretLeft, Diamond, Sparkle, Tag, Crown, ShareNetwork, ArrowRight } from 'phosphor-react-native';
@@ -322,7 +323,7 @@ export default function StatisticsScreen() {
                 style={[styles.upgradeBtn, { backgroundColor: colors.accent }]}
                 onPress={() => {
                   void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  router.push('/paywall' as any);
+                  openPaywallOnce(() => router.push('/paywall' as any));
                 }}
                 activeOpacity={0.8}
               >

@@ -13,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { openPaywallOnce } from '@/lib/paywallGuard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Flashlight, Scan, Check, Drop, Heart, Camera, ArrowCounterClockwise } from 'phosphor-react-native';
@@ -233,7 +234,7 @@ export default function ScannerScreen() {
       if (err.message.includes('limited to')) {
         Alert.alert('Pro Feature', err.message, [
           { text: 'Not Now', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => router.push('/paywall?source=limit_scanner') },
+          { text: 'Upgrade', onPress: () => openPaywallOnce(() => router.push('/paywall?source=limit_scanner')) },
         ]);
       } else {
         Alert.alert('Error', err.message);

@@ -23,6 +23,7 @@ import { computeArchetype, ScentArchetype } from '@/lib/scent-archetype';
 import { ONBOARDING_QUIZ_KEY, QuizResults } from '@/constants/quiz';
 import { logAnalyticsEvent } from '@/lib/analytics';
 import { isWinbackEligible, markWinbackShown, incrementPaywallDismissCount } from '@/lib/winback';
+import { markPaywallMounted, markPaywallUnmounted } from '@/lib/paywallGuard';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -201,6 +202,15 @@ export default function PaywallScreen() {
   const remSecs = Math.floor((remainingMs % (60 * 1000)) / 1000);
   const pad = (n: number) => String(n).padStart(2, '0');
   const countdownText = `${pad(remHours)}:${pad(remMins)}:${pad(remSecs)}`;
+
+  // Authoritative source of truth for the global "a paywall is open" guard.
+  // Set on mount and cleared on unmount so a second presentation can never be
+  // stacked on top of this one (the double-paywall freeze), and so the flag can
+  // never get permanently stuck (unmount always clears it).
+  useEffect(() => {
+    markPaywallMounted();
+    return () => markPaywallUnmounted();
+  }, []);
 
   useEffect(() => {
     Animated.parallel([

@@ -15,6 +15,7 @@ import {
   KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { openPaywallOnce } from '@/lib/paywallGuard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -472,7 +473,9 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
       router.replace('/');
       paywallTimer.current = setTimeout(() => {
         try {
-          router.push({ pathname: '/paywall', params: { source: 'onboarding' } });
+          openPaywallOnce(() =>
+            router.push({ pathname: '/paywall', params: { source: 'onboarding' } })
+          );
         } catch (e) {
           console.log('Failed to push paywall after onboarding:', e);
         }
