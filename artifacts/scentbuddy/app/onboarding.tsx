@@ -34,10 +34,16 @@ import {
   EyeSlash,
   WarningCircle,
   CaretLeft,
+  MapPin,
+  TrendUp,
+  ArrowDown,
 } from 'phosphor-react-native';
 import { AntDesign } from '@expo/vector-icons';
 import {
-  QUIZ_STEPS,
+  QUIZ_FLOW,
+  QUESTION_BY_KEY,
+  QUIZ_QUESTION_COUNT,
+  QuizQuestionType,
   ONBOARDING_QUIZ_KEY,
   QuizResults,
   STARTER_COLLECTION_KEY,
@@ -129,6 +135,48 @@ const TESTIMONIALS: Testimonial[] = [
   },
 ];
 
+interface SolutionRow {
+  icon: React.ElementType;
+  title: string;
+  desc: string;
+}
+
+// Map the user's stated frustrations + goals to the concrete features that
+// close each one. Keeps the "how the app closes your gap" screen personal
+// rather than a generic feature tour.
+function buildSolutions(struggles: string[], goals: string[]): SolutionRow[] {
+  const rows: SolutionRow[] = [];
+  const add = (r: SolutionRow) => {
+    if (rows.length < 4 && !rows.some((x) => x.title === r.title)) rows.push(r);
+  };
+  const s = (v: string) => struggles.includes(v);
+  const g = (v: string) => goals.includes(v);
+
+  if (s('I blind-buy and regret it') || g('Stop wasting money on bad buys'))
+    add({ icon: Scan, title: 'AI scent matching', desc: "Get matched to bottles you'll love before you spend a cent." });
+  if (s("I can't find my signature") || g('Find my signature scent'))
+    add({ icon: Drop, title: 'Scent DNA', desc: "Pinpoint the profile that's unmistakably you." });
+  if (s('I forget what I own') || g('Track & remember what I own'))
+    add({ icon: ChartBar, title: 'Collection tracker', desc: 'Every bottle, note and memory in one place.' });
+  if (s('Too many options, I feel lost'))
+    add({ icon: Sparkle, title: 'Curated For You', desc: 'A personal shortlist instead of endless choices.' });
+  if (s('I wear the same one on repeat') || g('Build a smart, curated collection'))
+    add({ icon: ChartBar, title: 'Scent wardrobe', desc: 'Build a rotation for every season and moment.' });
+  if (s("I don't know what suits me"))
+    add({ icon: Users, title: 'Twin Finder', desc: 'See what people with your exact taste wear.' });
+  if (g('Get more compliments'))
+    add({ icon: Star, title: 'Compliment-getters', desc: 'Surface crowd-pleasers proven to turn heads.' });
+  if (g('Discover niche hidden gems'))
+    add({ icon: Crown, title: 'Hidden gems', desc: "Go beyond mainstream into niche you'd never find." });
+
+  if (rows.length === 0) {
+    add({ icon: Drop, title: 'Scent DNA', desc: 'Understand your taste in one clear profile.' });
+    add({ icon: Scan, title: 'AI scent matching', desc: 'Personalized picks that actually fit you.' });
+    add({ icon: ChartBar, title: 'Collection tracker', desc: 'Keep your whole wardrobe organized.' });
+  }
+  return rows;
+}
+
 type Phase = 'features' | 'social' | 'quiz' | 'result' | 'signin';
 type AuthMode = 'signup' | 'login';
 
@@ -155,10 +203,11 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
   const [phase, setPhase] = useState<Phase>('features');
   const [featureIndex, setFeatureIndex] = useState(0);
 
-  const [quizStep, setQuizStep] = useState(0);
-  const [quizSelections, setQuizSelections] = useState<string[][]>(
-    QUIZ_STEPS.map(() => [])
-  );
+  const [flowIndex, setFlowIndex] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string[]>>({});
+  // One navigation per render — blocks rapid multi-taps from skipping steps
+  // or pushing flowIndex out of bounds. Reset whenever the step changes.
+  const navLock = useRef(false);
   const [archetype, setArchetype] = useState<ScentArchetype | null>(null);
   const [matches, setMatches] = useState<FragranceMatch[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
@@ -248,6 +297,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
   }, [phase, featureIndex, animateFocal]);
 
   useEffect(() => {
+    navLock.current = false;
     if (phase === 'quiz') {
       quizFade.setValue(0);
       quizSlide.setValue(24);
@@ -256,7 +306,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
         Animated.timing(quizSlide, { toValue: 0, duration: 400, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       ]).start();
     }
-  }, [phase, quizStep, quizFade, quizSlide]);
+  }, [phase, flowIndex, quizFade, quizSlide]);
 
   useEffect(() => {
     if (phase === 'result') {
@@ -321,7 +371,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 
   const startQuiz = useCallback(() => {
     if (Platform.OS !== 'web') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setQuizStep(0);
+    setFlowIndex(0);
     setPhase('quiz');
   }, []);
 
@@ -364,11 +414,24 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     if (Platform.OS !== 'web') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     }
+    const a = answers;
     const results: QuizResults = {
-      scentFamilies: quizSelections[0],
-      favoriteNotes: quizSelections[1],
-      occasions: quizSelections[2],
-      priorities: quizSelections[3],
+      scentFamilies: a['scentFamilies'] ?? [],
+      favoriteNotes: a['favoriteNotes'] ?? [],
+      occasions: a['occasions'] ?? [],
+      priorities: a['priorities'] ?? [],
+      experienceLevel: a['experienceLevel']?.[0] ?? null,
+      collectionSize: a['collectionSize']?.[0] ?? null,
+      struggles: a['struggles'] ?? [],
+      discoveryStyle: a['discoveryStyle']?.[0] ?? null,
+      intensity: a['intensity']?.[0] ?? null,
+      personality: a['personality'] ?? [],
+      seasons: a['seasons'] ?? [],
+      goals: a['goals'] ?? [],
+      budget: a['budget']?.[0] ?? null,
+      adventurousness: a['adventurousness']?.[0] ?? null,
+      signatureStatus: a['signatureStatus']?.[0] ?? null,
+      gender: a['gender']?.[0] ?? null,
       completedAt: new Date().toISOString(),
     };
     try {
@@ -380,7 +443,7 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     setArchetype(computed);
     setPhase('result');
     void fetchMatches(computed.searchSeeds);
-  }, [quizSelections, fetchMatches]);
+  }, [answers, fetchMatches]);
 
   const toggleOwned = useCallback((match: FragranceMatch) => {
     haptic();
@@ -388,36 +451,40 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
     setOwnedPicks((prev) => ({ ...prev, [key]: !prev[key] }));
   }, [haptic]);
 
-  const toggleQuizSelection = useCallback((label: string) => {
+  const toggleAnswer = useCallback((key: string, label: string, type: QuizQuestionType) => {
     haptic();
-    setQuizSelections((prev) => {
-      const updated = [...prev];
-      const stepSel = [...updated[quizStep]];
-      if (stepSel.includes(label)) {
-        updated[quizStep] = stepSel.filter((s) => s !== label);
-      } else {
-        updated[quizStep] = [...stepSel, label];
+    setAnswers((prev) => {
+      const cur = prev[key] ?? [];
+      if (type === 'single') {
+        return { ...prev, [key]: [label] };
       }
-      return updated;
+      if (cur.includes(label)) {
+        return { ...prev, [key]: cur.filter((s) => s !== label) };
+      }
+      return { ...prev, [key]: [...cur, label] };
     });
-  }, [quizStep, haptic]);
+  }, [haptic]);
 
-  const quizNext = useCallback(() => {
+  const flowNext = useCallback(() => {
+    if (navLock.current) return;
+    navLock.current = true;
     haptic();
-    if (quizStep < QUIZ_STEPS.length - 1) {
-      setQuizStep(quizStep + 1);
+    if (flowIndex < QUIZ_FLOW.length - 1) {
+      setFlowIndex((i) => Math.min(i + 1, QUIZ_FLOW.length - 1));
     } else {
       void goToResult();
     }
-  }, [quizStep, goToResult, haptic]);
+  }, [flowIndex, goToResult, haptic]);
 
-  const quizBack = useCallback(() => {
-    if (quizStep > 0) {
-      setQuizStep(quizStep - 1);
+  const flowBack = useCallback(() => {
+    if (navLock.current) return;
+    navLock.current = true;
+    if (flowIndex > 0) {
+      setFlowIndex((i) => Math.max(i - 1, 0));
     } else {
       setPhase('social');
     }
-  }, [quizStep]);
+  }, [flowIndex]);
 
   // ---- Flow to sign-in ----
   const saveStarterPicks = useCallback(async () => {
@@ -891,15 +958,58 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
 
   // ===================== QUIZ =====================
   if (phase === 'quiz') {
-    const currentQuizStep = QUIZ_STEPS[quizStep];
-    const currentSelections = quizSelections[quizStep];
-    const progress = ((quizStep + 1) / QUIZ_STEPS.length) * 100;
+    const step = QUIZ_FLOW[flowIndex];
+    if (!step) return null;
+    const progress = ((flowIndex + 1) / QUIZ_FLOW.length) * 100;
+    const questionSel = step.kind === 'question' ? (answers[step.key] ?? []) : [];
+    const minReq = step.kind === 'question' ? (QUESTION_BY_KEY[step.key].min ?? 1) : 0;
+    const canAdvance = step.kind !== 'question' || questionSel.length >= minReq;
+    const questionNo = QUIZ_FLOW.slice(0, flowIndex + 1).filter((f) => f.kind === 'question').length;
+
+    let ctaLabel = 'Continue';
+    let ctaSparkle = false;
+    if (step.kind === 'interstitial') {
+      if (step.id === 'summary') {
+        ctaLabel = 'Reveal my Scent DNA';
+        ctaSparkle = true;
+      } else if (step.id === 'solution') {
+        ctaLabel = 'I want this';
+      } else if (step.id === 'gap') {
+        ctaLabel = 'Show me the plan';
+      }
+    }
+
+    // Answer-derived values for the narrative interstitials.
+    const exp = (answers['experienceLevel'] ?? [])[0];
+    const col = (answers['collectionSize'] ?? [])[0];
+    const discovery = (answers['discoveryStyle'] ?? [])[0];
+    const struggles = answers['struggles'] ?? [];
+    const goals = answers['goals'] ?? [];
+    const families = answers['scentFamilies'] ?? [];
+    const notes = answers['favoriteNotes'] ?? [];
+    const personality = answers['personality'] ?? [];
+    const seasons = answers['seasons'] ?? [];
+    const occasions = answers['occasions'] ?? [];
+    const intensity = (answers['intensity'] ?? [])[0];
+    const budget = (answers['budget'] ?? [])[0];
+    const adventurousness = (answers['adventurousness'] ?? [])[0];
+    const gender = (answers['gender'] ?? [])[0];
+
+    const summaryGroups = [
+      { label: 'Loves', items: families },
+      { label: 'Notes', items: notes },
+      { label: 'Vibe', items: personality },
+      { label: 'Seasons', items: seasons },
+      { label: 'Wears for', items: occasions },
+      { label: 'Style', items: [intensity, budget, adventurousness, gender].filter(Boolean) as string[] },
+      { label: 'Goals', items: goals },
+    ];
 
     return (
       <View style={styles.container}>
         <Backdrop />
         <View style={[styles.topBar, { paddingTop: insets.top + 10 }]}>
-          <TouchableOpacity onPress={quizBack} style={styles.iconBtn} hitSlop={10}>
+          <TouchableOpacity onPress={flowBack} style={styles.iconBtn} hitSlop={10}>
             <CaretLeft size={20} color={SUBTEXT} weight="bold" />
           </TouchableOpacity>
           <View style={styles.progressTrack}>
@@ -911,52 +1021,219 @@ export default function OnboardingScreen({ onComplete }: OnboardingScreenProps) 
         </View>
 
         <Animated.View style={[styles.quizContent, { opacity: quizFade, transform: [{ translateY: quizSlide }] }]}>
-          <Text style={styles.quizTitle}>{currentQuizStep.title}</Text>
-          <Text style={styles.quizSubtitle}>{currentQuizStep.subtitle}</Text>
-
-          <ScrollView
-            style={styles.flex}
-            contentContainerStyle={styles.quizOptionsContainer}
-            showsVerticalScrollIndicator={false}
-          >
-            {currentQuizStep.options.map((opt) => {
-              const selected = currentSelections.includes(opt.label);
+          {step.kind === 'question' ? (
+            (() => {
+              const q = QUESTION_BY_KEY[step.key];
               return (
-                <TouchableOpacity
-                  key={opt.label}
-                  style={[styles.quizOption, selected && styles.quizOptionSelected]}
-                  onPress={() => toggleQuizSelection(opt.label)}
-                  activeOpacity={0.8}
-                >
-                  <View style={styles.quizOptionLeft}>
-                    <Text style={styles.quizOptionEmoji}>{opt.emoji}</Text>
-                    <View style={styles.flex}>
-                      <Text style={[styles.quizOptionLabel, selected && styles.quizOptionLabelSelected]}>
-                        {opt.label}
-                      </Text>
-                      {opt.sub ? <Text style={styles.quizOptionSub}>{opt.sub}</Text> : null}
-                    </View>
-                  </View>
-                  <View style={[styles.quizCheckbox, selected && styles.quizCheckboxSelected]}>
-                    {selected ? <Check size={14} color="#1a1208" weight="bold" /> : null}
-                  </View>
-                </TouchableOpacity>
+                <>
+                  <Text style={styles.quizEyebrow}>
+                    {q.part} · {questionNo} OF {QUIZ_QUESTION_COUNT}
+                  </Text>
+                  <Text style={styles.quizTitle}>{q.title}</Text>
+                  <Text style={styles.quizSubtitle}>{q.subtitle}</Text>
+
+                  <ScrollView
+                    style={styles.flex}
+                    contentContainerStyle={styles.quizOptionsContainer}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {q.options.map((opt) => {
+                      const selected = questionSel.includes(opt.label);
+                      return (
+                        <TouchableOpacity
+                          key={opt.label}
+                          style={[styles.quizOption, selected && styles.quizOptionSelected]}
+                          onPress={() => toggleAnswer(q.key, opt.label, q.type)}
+                          activeOpacity={0.8}
+                        >
+                          <View style={styles.quizOptionLeft}>
+                            <Text style={styles.quizOptionEmoji}>{opt.emoji}</Text>
+                            <View style={styles.flex}>
+                              <Text style={[styles.quizOptionLabel, selected && styles.quizOptionLabelSelected]}>
+                                {opt.label}
+                              </Text>
+                              {opt.sub ? <Text style={styles.quizOptionSub}>{opt.sub}</Text> : null}
+                            </View>
+                          </View>
+                          {q.type === 'single' ? (
+                            <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
+                              {selected ? <View style={styles.radioInner} /> : null}
+                            </View>
+                          ) : (
+                            <View style={[styles.quizCheckbox, selected && styles.quizCheckboxSelected]}>
+                              {selected ? <Check size={14} color="#1a1208" weight="bold" /> : null}
+                            </View>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                </>
               );
-            })}
-          </ScrollView>
+            })()
+          ) : (
+            <ScrollView
+              style={styles.flex}
+              contentContainerStyle={styles.interScrollContent}
+              showsVerticalScrollIndicator={false}
+            >
+              {step.id === 'status' && (
+                <>
+                  <View style={styles.interBadge}>
+                    <MapPin size={14} color={GOLD} weight="fill" />
+                    <Text style={styles.interBadgeText}>WHERE YOU ARE TODAY</Text>
+                  </View>
+                  <Text style={styles.interTitle}>Here&apos;s your{'\n'}starting point</Text>
+                  <Text style={styles.interSub}>Everything after this is built around exactly this.</Text>
+
+                  <View style={styles.interCard}>
+                    {exp ? (
+                      <View style={styles.interRow}>
+                        <Text style={styles.interRowLabel}>Experience</Text>
+                        <Text style={styles.interRowValue}>{exp}</Text>
+                      </View>
+                    ) : null}
+                    {col ? (
+                      <>
+                        <View style={styles.interDivider} />
+                        <View style={styles.interRow}>
+                          <Text style={styles.interRowLabel}>Collection</Text>
+                          <Text style={styles.interRowValue}>{col} fragrances</Text>
+                        </View>
+                      </>
+                    ) : null}
+                    {discovery ? (
+                      <>
+                        <View style={styles.interDivider} />
+                        <View style={styles.interRow}>
+                          <Text style={styles.interRowLabel}>Finds scents via</Text>
+                          <Text style={styles.interRowValue}>{discovery}</Text>
+                        </View>
+                      </>
+                    ) : null}
+                  </View>
+
+                  {struggles.length > 0 && (
+                    <>
+                      <Text style={styles.interSectionLabel}>What&apos;s holding you back</Text>
+                      <View style={styles.struggleList}>
+                        {struggles.map((str) => (
+                          <View key={str} style={styles.struggleRow}>
+                            <WarningCircle size={18} color="#e8a87c" weight="fill" />
+                            <Text style={styles.struggleText}>{str}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    </>
+                  )}
+                </>
+              )}
+
+              {step.id === 'gap' && (
+                <>
+                  <View style={styles.interBadge}>
+                    <TrendUp size={14} color={GOLD} weight="fill" />
+                    <Text style={styles.interBadgeText}>THE GAP</Text>
+                  </View>
+                  <Text style={styles.interTitle}>From where you are{'\n'}to where you want to be</Text>
+
+                  <View style={styles.gapBlock}>
+                    <Text style={styles.gapBlockLabel}>TODAY</Text>
+                    <Text style={styles.gapBlockText}>
+                      {[col ? `${col} bottles` : null, exp ? exp.toLowerCase() : null]
+                        .filter(Boolean)
+                        .join(' · ') || 'Just getting started'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.gapArrow}>
+                    <ArrowDown size={22} color={GOLD} weight="bold" />
+                  </View>
+
+                  <View style={styles.gapBlockGold}>
+                    <Text style={styles.gapBlockLabelGold}>WHERE YOU WANT TO BE</Text>
+                    <Text style={styles.gapBlockTextGold}>
+                      {goals.length ? goals.slice(0, 2).join(' · ') : 'A collection that feels like you'}
+                    </Text>
+                  </View>
+
+                  <View style={styles.gapCallout}>
+                    <Text style={styles.gapCalloutText}>
+                      That distance is the gap — and closing it by guessing alone is slow and expensive.
+                      ScentBuddy gets you there faster.
+                    </Text>
+                  </View>
+                </>
+              )}
+
+              {step.id === 'solution' && (
+                <>
+                  <View style={styles.interBadge}>
+                    <Sparkle size={14} color={GOLD} weight="fill" />
+                    <Text style={styles.interBadgeText}>YOUR PERSONAL PLAN</Text>
+                  </View>
+                  <Text style={styles.interTitle}>How ScentBuddy{'\n'}closes your gap</Text>
+                  <Text style={styles.interSub}>Built from your answers — not a generic tour.</Text>
+
+                  <View style={styles.solutionList}>
+                    {buildSolutions(struggles, goals).map((r) => {
+                      const Icon = r.icon;
+                      return (
+                        <View key={r.title} style={styles.solutionRow}>
+                          <View style={styles.solutionIcon}>
+                            <Icon size={22} color={GOLD} weight="duotone" />
+                          </View>
+                          <View style={styles.flex}>
+                            <Text style={styles.solutionTitle}>{r.title}</Text>
+                            <Text style={styles.solutionDesc}>{r.desc}</Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {step.id === 'summary' && (
+                <>
+                  <View style={styles.interBadge}>
+                    <Sparkle size={14} color={GOLD} weight="fill" />
+                    <Text style={styles.interBadgeText}>YOUR SCENT SNAPSHOT</Text>
+                  </View>
+                  <Text style={styles.interTitle}>This is you,{'\n'}in fragrance</Text>
+                  <Text style={styles.interSub}>
+                    Everything you told us, in one place. Ready for your Scent DNA?
+                  </Text>
+
+                  {summaryGroups.map((grp) =>
+                    grp.items.length ? (
+                      <View key={grp.label} style={styles.summaryGroup}>
+                        <Text style={styles.summaryGroupLabel}>{grp.label}</Text>
+                        <View style={styles.chipWrap}>
+                          {grp.items.map((it) => (
+                            <View key={it} style={styles.chip}>
+                              <Text style={styles.chipText}>{it}</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    ) : null,
+                  )}
+                </>
+              )}
+            </ScrollView>
+          )}
         </Animated.View>
 
         <View style={[styles.footer, { paddingBottom: insets.bottom + 20 }]}>
           <TouchableOpacity
-            style={[styles.primaryBtn, currentSelections.length === 0 && styles.btnDim]}
-            onPress={quizNext}
-            disabled={currentSelections.length === 0}
+            style={[styles.primaryBtn, !canAdvance && styles.btnDim]}
+            onPress={flowNext}
+            disabled={!canAdvance}
             activeOpacity={0.9}
           >
-            <Text style={styles.primaryBtnText}>
-              {quizStep === QUIZ_STEPS.length - 1 ? 'Reveal my Scent DNA' : 'Continue'}
-            </Text>
-            {quizStep === QUIZ_STEPS.length - 1 ? (
+            <Text style={styles.primaryBtnText}>{ctaLabel}</Text>
+            {ctaSparkle ? (
               <Sparkle size={18} color="#1a1208" weight="fill" />
             ) : (
               <ArrowRight size={18} color="#1a1208" weight="bold" />
@@ -1361,6 +1638,243 @@ const styles = StyleSheet.create({
   quizCheckboxSelected: {
     backgroundColor: GOLD,
     borderColor: GOLD,
+  },
+  quizEyebrow: {
+    color: GOLD,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.6,
+    marginBottom: 10,
+  },
+  radioOuter: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioOuterSelected: {
+    borderColor: GOLD,
+  },
+  radioInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: GOLD,
+  },
+
+  // Interstitials (narrative screens)
+  interScrollContent: {
+    paddingTop: 6,
+    paddingBottom: 24,
+  },
+  interBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(196,154,108,0.12)',
+    marginBottom: 14,
+  },
+  interBadgeText: {
+    color: GOLD,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+  },
+  interTitle: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: TEXT,
+    letterSpacing: -0.6,
+    lineHeight: 37,
+    marginBottom: 10,
+  },
+  interSub: {
+    fontSize: 16,
+    lineHeight: 23,
+    color: SUBTEXT,
+    marginBottom: 22,
+  },
+  interCard: {
+    backgroundColor: CARD,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+  },
+  interRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 15,
+    gap: 12,
+  },
+  interRowLabel: {
+    color: SUBTEXT,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  interRowValue: {
+    color: TEXT,
+    fontSize: 15,
+    fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  interDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
+  interSectionLabel: {
+    color: FAINT,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  struggleList: {
+    gap: 8,
+  },
+  struggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: 'rgba(232,168,124,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(232,168,124,0.22)',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+  },
+  struggleText: {
+    flex: 1,
+    color: 'rgba(246,241,233,0.9)',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  gapBlock: {
+    backgroundColor: CARD,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  gapBlockGold: {
+    backgroundColor: 'rgba(196,154,108,0.13)',
+    borderWidth: 1,
+    borderColor: 'rgba(196,154,108,0.5)',
+    borderRadius: 18,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+  },
+  gapBlockLabel: {
+    color: FAINT,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    marginBottom: 6,
+  },
+  gapBlockLabelGold: {
+    color: GOLD,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    marginBottom: 6,
+  },
+  gapBlockText: {
+    color: TEXT,
+    fontSize: 17,
+    fontWeight: '700',
+    textTransform: 'capitalize',
+  },
+  gapBlockTextGold: {
+    color: GOLD_LIGHT,
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  gapArrow: {
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  gapCallout: {
+    marginTop: 20,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 16,
+    padding: 16,
+  },
+  gapCalloutText: {
+    color: 'rgba(246,241,233,0.72)',
+    fontSize: 15,
+    lineHeight: 23,
+  },
+  solutionList: {
+    gap: 10,
+  },
+  solutionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    backgroundColor: CARD,
+    borderWidth: 1,
+    borderColor: CARD_BORDER,
+    borderRadius: 16,
+    padding: 14,
+  },
+  solutionIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 13,
+    backgroundColor: 'rgba(196,154,108,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  solutionTitle: {
+    color: TEXT,
+    fontSize: 16,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  solutionDesc: {
+    color: SUBTEXT,
+    fontSize: 13.5,
+    lineHeight: 19,
+  },
+  summaryGroup: {
+    marginBottom: 18,
+  },
+  summaryGroupLabel: {
+    color: FAINT,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.4,
+    marginBottom: 10,
+  },
+  chipWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chip: {
+    backgroundColor: 'rgba(196,154,108,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(196,154,108,0.3)',
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  chipText: {
+    color: GOLD_LIGHT,
+    fontSize: 14,
+    fontWeight: '600',
   },
 
   // Result
