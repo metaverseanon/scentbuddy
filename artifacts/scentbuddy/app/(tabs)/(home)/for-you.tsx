@@ -189,7 +189,7 @@ export default function ForYouScreen() {
   }, [quizFamilies, quizResults]);
 
   const recommendationsQuery = useQuery({
-    queryKey: ['recommendations', user?.id, topSearchNotes.join(','), quizFamilies.join(','), dailySeed],
+    queryKey: ['recommendations', user?.id, topSearchNotes.join(','), quizFamilies.join(','), dailySeed, isPro],
     queryFn: async () => {
       if (topSearchNotes.length === 0) return [];
       const allResults: SearchResult[] = [];
@@ -285,7 +285,7 @@ export default function ForYouScreen() {
         return { ...r, matchPct: pct };
       });
     },
-    enabled: topSearchNotes.length > 0 && !!isPro,
+    enabled: topSearchNotes.length > 0,
     staleTime: 1000 * 60 * 60,
   });
 
@@ -613,21 +613,38 @@ export default function ForYouScreen() {
               </Text>
             </View>
 
-            {[
-              { name: 'Layton', brand: 'Parfums de Marly', conc: 'EDP', match: 94, notes: ['Apple', 'Lavender', 'Vanilla', 'Cardamom'] },
-              { name: 'Oud Wood', brand: 'Tom Ford', conc: 'EDP', match: 91, notes: ['Oud', 'Rosewood', 'Sandalwood', 'Vanilla'] },
-            ].map((rec, i) => (
+            {(recommendations.length > 0
+              ? recommendations.slice(0, 2).map((r) => ({
+                  name: r.name,
+                  brand: r.brand,
+                  conc: r.concentration ?? '',
+                  match: r.matchPct,
+                  notes: (r.sharedNotes.length > 0
+                    ? r.sharedNotes
+                    : [...(r.topNotes ?? []), ...(r.heartNotes ?? [])]
+                  ).slice(0, 4),
+                  imageUrl: r.imageUrl as string | undefined,
+                }))
+              : [
+                  { name: 'Layton', brand: 'Parfums de Marly', conc: 'EDP', match: 94, notes: ['Apple', 'Lavender', 'Vanilla', 'Cardamom'], imageUrl: undefined as string | undefined },
+                  { name: 'Oud Wood', brand: 'Tom Ford', conc: 'EDP', match: 91, notes: ['Oud', 'Rosewood', 'Sandalwood', 'Vanilla'], imageUrl: undefined as string | undefined },
+                ]
+            ).map((rec, i) => (
               <View key={`preview-${i}`} style={[styles.recCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
                 <View style={[styles.recAccent, { backgroundColor: colors.accent }]} />
                 <View style={styles.recContent}>
                   <View style={styles.recTop}>
-                    <View style={[styles.recImage, { backgroundColor: colors.chip, alignItems: 'center', justifyContent: 'center' }]}>
-                      <Sparkle size={28} color={colors.accent} weight="duotone" />
-                    </View>
+                    {rec.imageUrl ? (
+                      <Image source={{ uri: forceHttps(rec.imageUrl) ?? undefined }} style={styles.recImage} resizeMode="contain" />
+                    ) : (
+                      <View style={[styles.recImage, { backgroundColor: colors.chip, alignItems: 'center', justifyContent: 'center' }]}>
+                        <Sparkle size={28} color={colors.accent} weight="duotone" />
+                      </View>
+                    )}
                     <View style={styles.recInfo}>
                       <Text style={[styles.recName, { color: colors.text }]}>{rec.name}</Text>
                       <Text style={[styles.recBrand, { color: colors.subtext }]}>{rec.brand}</Text>
-                      <Text style={[styles.recConc, { color: colors.subtext }]}>{rec.conc}</Text>
+                      {rec.conc ? <Text style={[styles.recConc, { color: colors.subtext }]}>{rec.conc}</Text> : null}
                     </View>
                     <View style={styles.recMatch}>
                       <Text style={[styles.recMatchPct, { color: colors.accent }]}>{rec.match}%</Text>
